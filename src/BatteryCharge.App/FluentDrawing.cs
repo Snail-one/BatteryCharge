@@ -9,6 +9,8 @@ internal static class FluentDrawing
     internal static GraphicsPath Rounded(RectangleF rect, float radius)
     {
         var path = new GraphicsPath();
+        rect.Width = Math.Max(1, rect.Width);
+        rect.Height = Math.Max(1, rect.Height);
         var diameter = Math.Min(radius * 2, Math.Min(rect.Width, rect.Height));
         path.AddArc(rect.X, rect.Y, diameter, diameter, 180, 90);
         path.AddArc(rect.Right - diameter, rect.Y, diameter, diameter, 270, 90);

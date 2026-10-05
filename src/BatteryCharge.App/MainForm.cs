@@ -65,6 +65,7 @@ internal sealed partial class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleDimensions = new SizeF(96, 96);
         AutoScaleMode = AutoScaleMode.Dpi;
+        DoubleBuffered = true;
         ClientSize = new Size(1020, 760);
         BackColor = FluentPalette.Light.Background;
 
@@ -215,8 +216,7 @@ internal sealed partial class MainForm : Form
 
     private void ApplyLanguage()
     {
-        SuspendLayout();
-        try
+        using (new FluentLayoutBatch(this))
         {
             Text = T("AppName");
             foreach (var (control, key) in _localizedControls)
@@ -257,10 +257,6 @@ internal sealed partial class MainForm : Form
                 _tray.Text = T("TrayMode", T("AppName"), T("Detecting"));
             }
         }
-        finally
-        {
-            ResumeLayout(performLayout: true);
-        }
         if (IsHandleCreated)
             FitWindowToScreen();
     }
@@ -281,8 +277,7 @@ internal sealed partial class MainForm : Form
 
     private Task RefreshAsync() => PerformAsync(async () =>
     {
-        await RefreshStartupAsync();
-        await LoadSnapshotAsync();
+        await Task.WhenAll(RefreshStartupAsync(), LoadSnapshotAsync());
         return _snapshot is { Mode.IsAvailable: true, NightCharge.IsAvailable: true }
             ? T("StatusUpdated")
             : T("StatusPartial");
@@ -464,6 +459,7 @@ internal sealed partial class MainForm : Form
     {
         if (_snapshot is null)
             return;
+        using var layout = new FluentLayoutBatch(_overviewPage);
         var mode = _snapshot.Mode.Value;
         _modeState.Text = mode.HasValue ? ModeName(mode.Value) : T("ModeUnavailable");
         if (mode.HasValue && updateSelection)
@@ -506,6 +502,7 @@ internal sealed partial class MainForm : Form
 
     private void UpdateEnabledState()
     {
+        using var layout = new FluentLayoutBatch(_overviewPage);
         var idle = !_busy && !_startupBusy && !_languageBusy && !_cleanupBusy;
         var modeAvailable = idle && _snapshot?.Mode.IsAvailable == true;
         foreach (var card in _modeCards.Values)
@@ -553,6 +550,7 @@ internal sealed partial class MainForm : Form
         if (WindowState == FormWindowState.Minimized)
             WindowState = FormWindowState.Normal;
         FitWindowToScreen();
+        RenderPower();
         Activate();
     }
 

@@ -4,11 +4,11 @@ using BatteryCharge.Core;
 
 namespace BatteryCharge.App;
 
-internal sealed class FluentSurface : Panel, IFluentControl
+internal sealed class FluentSurface : FluentStackPanel, IFluentControl
 {
     private FluentPalette _palette = FluentPalette.Light;
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public FluentPalette Palette { get => _palette; set { _palette = value; Invalidate(); } }
+    public FluentPalette Palette { get => _palette; set { if (_palette == value) return; _palette = value; Invalidate(); } }
     internal FluentSurface()
     {
         SetStyle(ControlStyles.ResizeRedraw | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
@@ -39,7 +39,7 @@ internal sealed class FluentButton : Button, IFluentControl
     private bool _pressed;
     private bool _selected;
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public FluentPalette Palette { get => _palette; set { _palette = value; Invalidate(); } }
+    public FluentPalette Palette { get => _palette; set { if (_palette == value) return; _palette = value; Invalidate(); } }
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     internal FluentButtonKind Kind { get; init; }
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -47,7 +47,7 @@ internal sealed class FluentButton : Button, IFluentControl
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     internal bool IconOnly { get; set; }
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    internal bool Selected { get => _selected; set { _selected = value; Invalidate(); } }
+    internal bool Selected { get => _selected; set { if (_selected == value) return; _selected = value; Invalidate(); } }
     internal FluentButton()
     {
         SetStyle(ControlStyles.ResizeRedraw | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
@@ -115,7 +115,7 @@ internal sealed class FluentToggle : CheckBox, IFluentControl
 {
     private FluentPalette _palette = FluentPalette.Light;
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public FluentPalette Palette { get => _palette; set { _palette = value; Invalidate(); } }
+    public FluentPalette Palette { get => _palette; set { if (_palette == value) return; _palette = value; Invalidate(); } }
     internal FluentToggle()
     {
         SetStyle(ControlStyles.ResizeRedraw | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
@@ -155,6 +155,43 @@ internal sealed class ModeCard : RadioButton, IFluentControl
     private FluentPalette _palette = FluentPalette.Light;
     private bool _hover;
     private bool _current;
+    private Font? _titleFont;
+    private Font? _titleFontSource;
+    private readonly Dictionary<(int Width, int Dpi, string Title, string Description, Font Font, Padding Padding), CardMetrics> _measurements = [];
+    private readonly record struct CardMetrics(int Height, Rectangle Title, Rectangle Description, Rectangle Badge);
+
+    private Font TitleFont
+    {
+        get
+        {
+            if (_titleFont is null || !ReferenceEquals(_titleFontSource, Font))
+            {
+                _titleFont?.Dispose();
+                _titleFont = new Font(Font, FontStyle.Bold);
+                _titleFontSource = Font;
+            }
+            return _titleFont;
+        }
+    }
+
+    private CardMetrics Measure(int width)
+    {
+        var key = (width, DeviceDpi, Text, Description, Font, Padding);
+        if (_measurements.TryGetValue(key, out var cached)) return cached;
+        var scale = DeviceDpi / 96f;
+        var textWidth = Math.Max(1, width - Padding.Horizontal);
+        var titleHeight = TextRenderer.MeasureText(Text, TitleFont, new Size(textWidth, 0), TextFormatFlags.WordBreak).Height;
+        var descriptionHeight = TextRenderer.MeasureText(Description, Font, new Size(textWidth, 0), TextFormatFlags.WordBreak).Height;
+        var title = new Rectangle(Padding.Left, Padding.Top + (int)Math.Ceiling(42 * scale), textWidth, titleHeight);
+        var description = new Rectangle(Padding.Left, title.Bottom + (int)Math.Ceiling(7 * scale), textWidth, descriptionHeight);
+        var badgeHeight = Math.Max(Font.Height, (int)Math.Ceiling(23 * scale));
+        var height = Math.Max((int)Math.Ceiling(184 * scale), description.Bottom + (int)Math.Ceiling(12 * scale) + badgeHeight + Padding.Bottom);
+        var badge = new Rectangle(Padding.Left, height - Padding.Bottom - badgeHeight, textWidth, badgeHeight);
+        var metrics = new CardMetrics(height, title, description, badge);
+        if (_measurements.Count >= 8) _measurements.Clear();
+        _measurements.Add(key, metrics);
+        return metrics;
+    }
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     internal ChargeMode Mode { get; }
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -162,9 +199,9 @@ internal sealed class ModeCard : RadioButton, IFluentControl
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     internal string CurrentText { get; set; } = "";
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    internal bool IsCurrent { get => _current; set { _current = value; AccessibleDescription = Description + (value ? " " + CurrentText : ""); Invalidate(); } }
+    internal bool IsCurrent { get => _current; set { if (_current == value) return; _current = value; AccessibleDescription = Description + (value ? " " + CurrentText : ""); Invalidate(); } }
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public FluentPalette Palette { get => _palette; set { _palette = value; Invalidate(); } }
+    public FluentPalette Palette { get => _palette; set { if (_palette == value) return; _palette = value; Invalidate(); } }
     internal ModeCard(ChargeMode mode)
     {
         Mode = mode;
@@ -173,20 +210,37 @@ internal sealed class ModeCard : RadioButton, IFluentControl
         AutoCheck = false;
         AutoSize = true;
         Appearance = Appearance.Button;
-        Dock = DockStyle.Fill;
-        Margin = new Padding(0, 0, 10, 0);
+        Dock = DockStyle.None;
+        Margin = Padding.Empty;
         Padding = new Padding(18);
         Cursor = Cursors.Hand;
     }
     public override Size GetPreferredSize(Size proposedSize)
     {
-        var scale = DeviceDpi / 96f;
-        var width = proposedSize.Width > Padding.Horizontal ? proposedSize.Width : (int)(216 * scale);
-        var textWidth = Math.Max(32, width - Padding.Horizontal);
-        using var titleFont = new Font(Font, FontStyle.Bold);
-        var titleHeight = TextRenderer.MeasureText(Text, titleFont, new Size(textWidth, 0), TextFormatFlags.WordBreak).Height;
-        var descriptionHeight = TextRenderer.MeasureText(Description, Font, new Size(textWidth, 0), TextFormatFlags.WordBreak).Height;
-        return new Size(width, Math.Max((int)(184 * scale), Padding.Vertical + (int)(66 * scale) + titleHeight + descriptionHeight));
+        var width = Math.Max(1, proposedSize.Width > 1 ? proposedSize.Width : (int)Math.Ceiling(216 * DeviceDpi / 96f));
+        return new Size(width, Measure(width).Height);
+    }
+
+    protected override void OnTextChanged(EventArgs e)
+    {
+        base.OnTextChanged(e);
+        Parent?.PerformLayout(this, nameof(Text));
+        Invalidate();
+    }
+
+    protected override void OnFontChanged(EventArgs e)
+    {
+        _measurements?.Clear();
+        _titleFont?.Dispose();
+        _titleFont = _titleFontSource = null;
+        base.OnFontChanged(e);
+        Parent?.PerformLayout(this, nameof(Font));
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _titleFont?.Dispose();
+        base.Dispose(disposing);
     }
     protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
     protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
@@ -210,17 +264,19 @@ internal sealed class ModeCard : RadioButton, IFluentControl
         var radio = new RectangleF(Width - Padding.Right - 16 * scale, Padding.Top + 4 * scale, 16 * scale, 16 * scale);
         e.Graphics.DrawEllipse(radioPen, radio);
         if (Checked) { using var dot = new SolidBrush(Palette.Accent); e.Graphics.FillEllipse(dot, RectangleF.Inflate(radio, -4 * scale, -4 * scale)); }
-        using var titleFont = new Font(Font, FontStyle.Bold);
-        var textWidth = Math.Max(1, Width - Padding.Horizontal);
-        var y = Padding.Top + (int)(42 * scale);
-        var titleHeight = TextRenderer.MeasureText(Text, titleFont, new Size(textWidth, 0), TextFormatFlags.WordBreak).Height;
-        TextRenderer.DrawText(e.Graphics, Text, titleFont, new Rectangle(Padding.Left, y, textWidth, titleHeight), foreground, TextFormatFlags.WordBreak);
-        y += titleHeight + (int)(7 * scale);
-        TextRenderer.DrawText(e.Graphics, Description, Font, new Rectangle(Padding.Left, y, textWidth, Math.Max(1, Height - y - (int)(38 * scale))), Palette.Secondary, TextFormatFlags.WordBreak);
+        var metrics = Measure(Width);
+        TextRenderer.DrawText(e.Graphics, Text, TitleFont, metrics.Title, foreground, TextFormatFlags.WordBreak);
+        TextRenderer.DrawText(e.Graphics, Description, Font, metrics.Description, Palette.Secondary, TextFormatFlags.WordBreak);
         if (IsCurrent)
         {
-            FluentDrawing.Glyph(e.Graphics, FluentGlyph.Check, new RectangleF(Padding.Left, Height - 29 * scale, 14 * scale, 14 * scale), Palette.Success);
-            TextRenderer.DrawText(e.Graphics, CurrentText, Font, new Rectangle(Padding.Left + (int)(19 * scale), Height - (int)(33 * scale), textWidth - (int)(19 * scale), (int)(23 * scale)), Palette.Success, TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+            var badge = metrics.Badge;
+            badge.Y += Math.Max(0, Height - metrics.Height);
+            FluentDrawing.Glyph(e.Graphics, FluentGlyph.Check,
+                new RectangleF(badge.X, badge.Y + (badge.Height - 14 * scale) / 2, 14 * scale, 14 * scale), Palette.Success);
+            var iconWidth = (int)Math.Ceiling(19 * scale);
+            TextRenderer.DrawText(e.Graphics, CurrentText, Font,
+                new Rectangle(badge.X + iconWidth, badge.Y, Math.Max(1, badge.Width - iconWidth), badge.Height),
+                Palette.Success, TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         }
         if (Focused && ShowFocusCues)
             ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -5, -5), Palette.Text, background);
@@ -231,7 +287,7 @@ internal sealed class GlyphView : Control, IFluentControl
 {
     private FluentPalette _palette = FluentPalette.Light;
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public FluentPalette Palette { get => _palette; set { _palette = value; Invalidate(); } }
+    public FluentPalette Palette { get => _palette; set { if (_palette == value) return; _palette = value; Invalidate(); } }
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     internal FluentGlyph Glyph { get; set; }
     internal GlyphView(FluentGlyph glyph, int size = 24)
@@ -252,9 +308,9 @@ internal sealed class BatteryMeter : Control, IFluentControl
     private FluentPalette _palette = FluentPalette.Light;
     private float? _level;
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public FluentPalette Palette { get => _palette; set { _palette = value; Invalidate(); } }
+    public FluentPalette Palette { get => _palette; set { if (_palette == value) return; _palette = value; Invalidate(); } }
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    internal float? Level { get => _level; set { _level = value; Invalidate(); } }
+    internal float? Level { get => _level; set { if (_level == value) return; _level = value; Invalidate(); } }
     internal BatteryMeter()
     {
         Size = new Size(100, 100);
@@ -268,7 +324,7 @@ internal sealed class BatteryMeter : Control, IFluentControl
     {
         var scale = DeviceDpi / 96f;
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        var side = Math.Min(Width, Height) - 12 * scale;
+        var side = Math.Max(1, Math.Min(Width, Height) - 12 * scale);
         var circle = new RectangleF((Width - side) / 2, (Height - side) / 2, side, side);
         using var track = new Pen(Palette.Border, 5 * scale);
         using var progress = new Pen(Level is < .2f ? Palette.Error : Palette.Accent, 5 * scale) { StartCap = LineCap.Round, EndCap = LineCap.Round };

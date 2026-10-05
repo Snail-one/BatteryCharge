@@ -108,7 +108,7 @@ internal static class Program
         form.ClientSize = new Size((int)(640 * scale), (int)(620 * scale));
         form.PerformLayout();
         await Task.Delay(50);
-        Assert(((TableLayoutPanel)normal.Parent!).ColumnCount == 1, "Narrow windows must stack the mode cards.");
+        Assert(((FluentModePanel)normal.Parent!).Stacked, "Narrow windows must stack the mode cards.");
         Assert(rapid.Checked && conservation.IsCurrent, "Responsive layout changed the selection or actual device state.");
         Capture(form, Path.Combine(screenshots, "overview-narrow.png"));
         form.Hide();
@@ -124,6 +124,131 @@ internal static class Program
         Assert(Find<TextBox>(form, "DiagnosticDetails").Text.Contains("Simulated device disconnected"),
             "The underlying error must be available in the diagnostic panel.");
         Capture(form, Path.Combine(screenshots, "overview-unavailable.png"));
+        await CheckLayoutsAsync(form, screenshots);
+        await CheckSlowReadAsync(form, transport, refresh, settings, overview);
+    }
+
+    private static async Task CheckLayoutsAsync(MainForm form, string screenshots)
+    {
+        var scale = form.DeviceDpi / 96f;
+        var language = Find<ComboBox>(form, "LanguagePicker");
+        var refresh = Find<Button>(form, "RefreshButton");
+        var settings = Find<Button>(form, "SettingsNavigation");
+        var overview = Find<Button>(form, "OverviewNavigation");
+        var viewport = Find<Panel>(form, "PageViewport");
+        foreach (var languageIndex in new[] { 0, 1 })
+        {
+            settings.PerformClick();
+            language.SelectedIndex = languageIndex;
+            await UntilAsync(() => language.Enabled && refresh.Enabled);
+            foreach (var width in new[] { 640, 800, 819, 820, 900, 1020 })
+            {
+                form.ClientSize = new Size((int)(width * scale), (int)(620 * scale));
+                foreach (var settingsPage in new[] { false, true })
+                {
+                    (settingsPage ? settings : overview).PerformClick();
+                    await Task.Delay(20);
+                    CheckGeometry(form);
+                    var page = Find<Panel>(form, settingsPage ? "SettingsPage" : "OverviewPage");
+                    Assert(!viewport.HorizontalScroll.Visible && page.Width <= viewport.ClientSize.Width,
+                        $"Page overflows horizontally at width {width} in {UiText.Language}.");
+                    Assert(page.Height >= page.GetPreferredSize(new Size(page.Width, 0)).Height,
+                        "The page height does not include all its content.");
+                    Assert(Find<Button>(form, "ExitButton").Visible && Find<Button>(form, "HideButton").Visible,
+                        "Footer actions disappeared during reflow.");
+                    if (width == 640)
+                        Capture(form, Path.Combine(screenshots, $"{(settingsPage ? "settings" : "overview")}-{UiText.Language}-narrow.png"));
+                }
+            }
+        }
+
+        overview.PerformClick();
+        form.ClientSize = new Size((int)(640 * scale), (int)(620 * scale));
+        var card = Find<ModeCard>(form, "ModeCardConservation");
+        var description = card.Description;
+        var originalFont = card.Font;
+        try
+        {
+            card.Description = string.Join(" ", Enumerable.Repeat(description, 6));
+            foreach (var fontScale in new[] { 1.25f, 1.5f, 2f })
+            {
+                using var largerFont = new Font(originalFont.FontFamily, originalFont.Size * fontScale);
+                card.Font = largerFont;
+                card.Parent!.PerformLayout();
+                await Task.Delay(20);
+                Assert(card.Height >= card.GetPreferredSize(new Size(card.Width, 0)).Height,
+                    "A long mode description or enlarged font clips the card contents.");
+                CheckGeometry(form);
+                card.Font = originalFont;
+            }
+        }
+        finally { card.Font = originalFont; card.Description = description; card.Parent!.PerformLayout(); }
+
+        var details = Find<TextBox>(form, "DiagnosticDetails");
+        viewport.ScrollControlIntoView(details);
+        await Task.Delay(20);
+        var visibleDetails = viewport.RectangleToClient(details.RectangleToScreen(details.ClientRectangle));
+        Assert(viewport.ClientRectangle.IntersectsWith(visibleDetails), "Expanded diagnostics cannot be reached by scrolling.");
+        settings.PerformClick();
+        overview.PerformClick();
+        await Task.Delay(20);
+        Assert(viewport.AutoScrollPosition == Point.Empty, "Changing pages must reset the old scroll offset.");
+
+        var layouts = 0;
+        LayoutEventHandler count = (_, _) => layouts++;
+        viewport.Layout += count;
+        try
+        {
+            for (var index = 0; index < 20; index++) form.PerformLayout();
+            Assert(layouts < 100, "Repeated layout causes an unstable scrollbar or responsive-layout loop.");
+        }
+        finally { viewport.Layout -= count; }
+        Console.WriteLine("PASS UI containment, wrapping, scrolling, breakpoints and enlarged fonts.");
+    }
+
+    private static void CheckGeometry(Control parent)
+    {
+        var children = parent.Controls.Cast<Control>().Where(child => child.Visible).ToArray();
+        foreach (var child in children)
+        {
+            // Pages extend vertically beyond a scrolling viewport by design.
+            if (parent is not Form && parent is not FluentViewport)
+                Assert(parent.ClientRectangle.Contains(child.Bounds),
+                    $"{child.Name} ({child.GetType().Name}) is clipped by {parent.GetType().Name}: {child.Bounds} / {parent.ClientRectangle}.");
+            if (child is Label label)
+                Assert(label.Height >= label.GetPreferredSize(new Size(label.Width, 0)).Height,
+                    $"Label is vertically clipped: {label.Text}.");
+            CheckGeometry(child);
+        }
+        for (var first = 0; first < children.Length; first++)
+        for (var second = first + 1; second < children.Length; second++)
+            Assert(!children[first].Bounds.IntersectsWith(children[second].Bounds),
+                $"Sibling controls overlap: {children[first].GetType().Name} and {children[second].GetType().Name} in {parent.GetType().Name}.");
+    }
+
+    private static async Task CheckSlowReadAsync(MainForm form, PreviewTransport transport, Button refresh, Button settings, Button overview)
+    {
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        transport.ReadStarted = started;
+        transport.ReadRelease = release;
+        try
+        {
+            refresh.PerformClick();
+            await UntilAsync(() => started.IsSet);
+            var ticks = 0;
+            using var heartbeat = new System.Windows.Forms.Timer { Interval = 20 };
+            heartbeat.Tick += (_, _) => ticks++;
+            heartbeat.Start();
+            settings.PerformClick();
+            Assert(Find<Panel>(form, "SettingsPage").Visible, "Navigation is blocked while reading a slow device.");
+            await Task.Delay(150);
+            Assert(ticks > 0 && !refresh.Enabled, "The UI message loop stopped while a device read was pending.");
+            overview.PerformClick();
+        }
+        finally { transport.ReadStarted = null; transport.ReadRelease = null; release.Set(); }
+        await UntilAsync(() => refresh.Enabled);
+        Console.WriteLine("PASS UI stays responsive while device I/O is pending.");
     }
 
     private static T Find<T>(Control parent, string name) where T : Control =>
@@ -141,6 +266,7 @@ internal static class Program
 
     private static void Capture(Form form, string path)
     {
+        CheckGeometry(form);
         form.Refresh();
         using var bitmap = new Bitmap(form.Width, form.Height);
         form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, bitmap.Size));
@@ -166,12 +292,23 @@ internal sealed class PreviewTransport : IEnergyTransport
     private uint _night = 1;
     internal Exception? ModeError { get; set; }
     internal List<uint> Writes { get; } = [];
-    public uint Query(uint controlCode, uint input) => controlCode switch
+    internal ManualResetEventSlim? ReadStarted { get; set; }
+    internal ManualResetEventSlim? ReadRelease { get; set; }
+    public uint Query(uint controlCode, uint input)
     {
+        var release = ReadRelease;
+        if (release is not null)
+        {
+            ReadStarted?.Set();
+            if (!release.Wait(TimeSpan.FromSeconds(5))) throw new TimeoutException("Slow UI check did not release the device read.");
+        }
+        return controlCode switch
+        {
         ChargeProtocol.ModeControlCode => ModeError is null ? _mode : throw ModeError,
         ChargeProtocol.NightControlCode => _night,
         _ => throw new InvalidOperationException("Unexpected query.")
-    };
+        };
+    }
     public void Send(uint controlCode, uint input)
     {
         Writes.Add(input);

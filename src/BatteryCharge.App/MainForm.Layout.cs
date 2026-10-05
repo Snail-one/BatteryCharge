@@ -20,25 +20,26 @@ internal sealed partial class MainForm
     private readonly System.Windows.Forms.Timer _powerTimer = new() { Interval = 30_000 };
     private FluentPalette _palette = FluentPalette.Light;
     private TableLayoutPanel _shell = null!;
-    private TableLayoutPanel _modeGrid = null!;
+    private FluentModePanel _modeGrid = null!;
     private Panel _sidebar = null!;
     private Panel _viewport = null!;
-    private TableLayoutPanel _overviewPage = null!;
-    private TableLayoutPanel _settingsPage = null!;
+    private FluentStackPanel _overviewPage = null!;
+    private FluentStackPanel _settingsPage = null!;
     private FlowLayoutPanel _compactNavigation = null!;
     private FluentSurface _diagnostics = null!;
     private ChargeMode _selectedMode = ChargeMode.Normal;
     private bool _settingsVisible;
-    private bool _stackedModes;
     private bool _updatingResponsiveLayout;
     private bool _startupHasError;
+    private bool _paletteApplied;
+    private bool _appearanceUpdateQueued;
     private StatusTone _statusTone;
     private enum StatusTone { Info, Success, Error }
 
     private void BuildWindow()
     {
         _palette = WindowsAppearance.ReadPalette();
-        _shell = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
+        _shell = new FluentTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = Padding.Empty };
         _shell.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 200));
         _shell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         _shell.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -49,11 +50,11 @@ internal sealed partial class MainForm
         var brand = VerticalPanel(0, new GlyphView(FluentGlyph.Battery, 32), brandTitle, Secondary("BrandSubtitle"));
         brand.Margin = new Padding(0, 0, 0, 30);
         _sidebar.Controls.Add(VerticalPanel(0, brand, Localized(_overviewNav, "OverviewNav"), Localized(_settingsNav, "SettingsNav")));
-        var trayHint = Secondary("TrayHint");
+        var trayHint = VerticalPanel(0, Secondary("TrayHint"));
         trayHint.Dock = DockStyle.Bottom;
         _sidebar.Controls.Add(trayHint);
         _shell.Controls.Add(_sidebar, 0, 0);
-        var main = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(24, 26, 24, 16), Margin = Padding.Empty };
+        var main = new FluentTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(24, 26, 24, 16), Margin = Padding.Empty };
         main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -67,17 +68,16 @@ internal sealed partial class MainForm
         _pageTitle.Margin = new Padding(0, 0, 0, 6);
         _pageSubtitle.Margin = Padding.Empty;
         _secondaryLabels.Add(_pageSubtitle);
-        var header = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 2, RowCount = 1, Margin = new Padding(0, 0, 0, 22) };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        header.Controls.Add(VerticalPanel(0, _pageTitle, _pageSubtitle), 0, 0);
+        var header = new FluentRowPanel(null, VerticalPanel(0, _pageTitle, _pageSubtitle), Localized(_refresh, "Refresh"))
+        { Margin = new Padding(0, 0, 0, 22) };
         _refresh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         _refresh.Margin = new Padding(12, 5, 0, 0);
-        header.Controls.Add(Localized(_refresh, "Refresh"), 1, 0);
         main.Controls.Add(header, 0, 1);
-        _viewport = new Panel { Dock = DockStyle.Fill, AutoScroll = true, Margin = Padding.Empty };
+        _viewport = new FluentViewport { Dock = DockStyle.Fill, Margin = Padding.Empty, Name = "PageViewport" };
         _overviewPage = BuildOverview();
         _settingsPage = BuildSettings();
+        _overviewPage.Dock = _settingsPage.Dock = DockStyle.None;
+        _overviewPage.AutoSize = _settingsPage.AutoSize = false;
         _settingsPage.Visible = false;
         _viewport.Controls.Add(_settingsPage);
         _viewport.Controls.Add(_overviewPage);
@@ -97,11 +97,12 @@ internal sealed partial class MainForm
         _compactSettings.Click += (_, _) => SetPage(true);
         _detailsButton.Click += (_, _) =>
         {
+            using var layout = new FluentLayoutBatch(_overviewPage);
             _diagnostics.Visible = !_diagnostics.Visible;
             _detailsButton.Text = T(_diagnostics.Visible ? "HideDetails" : "ShowDetails");
         };
         _viewport.SizeChanged += (_, _) => UpdateResponsiveLayout();
-        _powerTimer.Tick += (_, _) => RenderPower();
+        _powerTimer.Tick += (_, _) => { if (Visible) RenderPower(); };
         _powerTimer.Start();
         _apply.Name = "ApplyModeButton"; _night.Name = "NightToggle"; _startup.Name = "StartupToggle";
         _languagePicker.Name = "LanguagePicker"; _details.Name = "DiagnosticDetails"; _refresh.Name = "RefreshButton";
@@ -110,7 +111,7 @@ internal sealed partial class MainForm
         SetPage(false); SelectMode(ChargeMode.Normal); RenderPower(); ApplyPalette(_palette);
     }
 
-    private TableLayoutPanel BuildOverview()
+    private FluentStackPanel BuildOverview()
     {
         _batteryLevel.Font = OwnFont(34, FontStyle.Bold);
         _batteryLevel.Margin = new Padding(0, 0, 0, 2);
@@ -118,20 +119,12 @@ internal sealed partial class MainForm
         _modeState.Font = OwnFont(12, FontStyle.Bold);
         _modeState.Margin = new Padding(0, 4, 0, 8);
         _secondaryLabels.AddRange([_powerState, _lastRead, _nightState, _selectionInfo]);
-        var hero = new TableLayoutPanel { Dock = DockStyle.Top, AutoSize = true, ColumnCount = 3, RowCount = 1, Margin = Padding.Empty };
-        hero.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        hero.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48));
-        hero.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52));
-        hero.Controls.Add(_batteryMeter, 0, 0);
-        hero.Controls.Add(VerticalPanel(0, Secondary("BatteryLevelLabel"), _batteryLevel, _powerState), 1, 0);
         var modeSummary = VerticalPanel(0, Secondary("CurrentModeLabel"), _modeState, _lastRead);
-        modeSummary.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-        hero.Controls.Add(modeSummary, 2, 0);
+        var hero = new FluentRowPanel(_batteryMeter,
+            VerticalPanel(0, Secondary("BatteryLevelLabel"), _batteryLevel, _powerState), modeSummary, flexibleAction: true);
         var modeHeading = SectionTitle("ChargeMode");
         modeHeading.Margin = new Padding(0, 12, 0, 5);
-        _modeGrid = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Top, ColumnCount = 3, RowCount = 1, Margin = new Padding(0, 12, 0, 12) };
-        for (var index = 0; index < 3; index++) _modeGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / 3));
-        _modeGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        _modeGrid = new FluentModePanel { Name = "ModeGrid" };
         foreach (var mode in Enum.GetValues<ChargeMode>())
         {
             var card = new ModeCard(mode) { Name = $"ModeCard{mode}", Text = ModeName(mode), TabIndex = (int)mode };
@@ -146,17 +139,13 @@ internal sealed partial class MainForm
                 _modeCards[next].Focus();
                 e.Handled = e.SuppressKeyPress = true;
             };
-            _modeCards.Add(mode, card); _modeGrid.Controls.Add(card, (int)mode, 0);
+            _modeCards.Add(mode, card); _modeGrid.Controls.Add(card);
         }
-        _modeCards[ChargeMode.RapidCharge].Margin = Padding.Empty;
-        var applyRow = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Top, ColumnCount = 2, RowCount = 1, Margin = new Padding(0, 0, 0, 18) };
-        applyRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        applyRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        _selectionInfo.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        _selectionInfo.Anchor = AnchorStyles.Left;
         _selectionInfo.Dock = DockStyle.None;
-        applyRow.Controls.Add(_selectionInfo, 0, 0);
         _apply.Margin = new Padding(12, 0, 0, 0);
-        applyRow.Controls.Add(Localized(_apply, "ApplyMode"), 1, 0);
+        var applyRow = new FluentRowPanel(null, _selectionInfo, Localized(_apply, "ApplyMode"))
+        { Margin = new Padding(0, 0, 0, 18) };
         _night.Text = _night.AccessibleName = T("NightToggle");
         var night = SettingsRow(FluentGlyph.Moon, VerticalPanel(0, SectionTitle("NightCharge"), Hint("NightHint"), _nightState), _night);
         _detailsButton.Text = T("ShowDetails");
@@ -168,7 +157,7 @@ internal sealed partial class MainForm
             Surface(night), Hint("ConservationHint"), status, _diagnostics);
     }
 
-    private TableLayoutPanel BuildSettings()
+    private FluentStackPanel BuildSettings()
     {
         _languagePicker.Items.Add(new LanguageChoice("zh-CN", "简体中文"));
         _languagePicker.Items.Add(new LanguageChoice("en-US", "English"));
@@ -192,6 +181,7 @@ internal sealed partial class MainForm
 
     private void SetPage(bool settings)
     {
+        using var layout = new FluentLayoutBatch(_shell);
         _settingsVisible = settings;
         _overviewPage.Visible = !settings; _settingsPage.Visible = settings;
         _overviewNav.Selected = _compactOverview.Selected = !settings;
@@ -209,30 +199,20 @@ internal sealed partial class MainForm
         {
             var scale = DeviceDpi / 96f;
             var compact = ClientSize.Width < 820 * scale;
+            var sidebarWidth = compact ? 0 : 200 * scale;
+            if (_sidebar.Visible == !compact && _shell.ColumnStyles[0].Width == sidebarWidth
+                && _compactNavigation.Visible == compact) return;
+            using var layout = new FluentLayoutBatch(_shell);
             _sidebar.Visible = !compact;
-            _shell.ColumnStyles[0].Width = compact ? 0 : 200 * scale;
+            _shell.ColumnStyles[0].Width = sidebarWidth;
             _compactNavigation.Visible = compact;
-            var contentWidth = ClientSize.Width - (compact ? 0 : 200 * scale)
-                - 48 * scale - SystemInformation.VerticalScrollBarWidth;
-            var stack = contentWidth < 580 * scale;
-            if (stack == _stackedModes) return;
-            _stackedModes = stack;
-            _modeGrid.SuspendLayout(); _modeGrid.ColumnStyles.Clear(); _modeGrid.RowStyles.Clear();
-            _modeGrid.ColumnCount = stack ? 1 : 3; _modeGrid.RowCount = stack ? 3 : 1;
-            for (var index = 0; index < _modeGrid.ColumnCount; index++) _modeGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f / _modeGrid.ColumnCount));
-            for (var index = 0; index < _modeGrid.RowCount; index++) _modeGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            foreach (var pair in _modeCards)
-            {
-                _modeGrid.SetCellPosition(pair.Value, new TableLayoutPanelCellPosition(stack ? 0 : (int)pair.Key, stack ? (int)pair.Key : 0));
-                pair.Value.Margin = stack ? new Padding(0, 0, 0, (int)(10 * scale)) : new Padding(0, 0, pair.Key == ChargeMode.RapidCharge ? 0 : (int)(10 * scale), 0);
-            }
-            _modeGrid.ResumeLayout(performLayout: true);
         }
         finally { _updatingResponsiveLayout = false; }
     }
 
     private void RenderPower()
     {
+        using var layout = new FluentLayoutBatch(_overviewPage);
         var power = SystemInformation.PowerStatus;
         var percent = power.BatteryLifePercent;
         var known = percent is >= 0 and <= 1 && !power.BatteryChargeStatus.HasFlag(BatteryChargeStatus.NoSystemBattery);
@@ -257,6 +237,9 @@ internal sealed partial class MainForm
 
     internal void ApplyPalette(FluentPalette palette)
     {
+        if (_paletteApplied && _palette == palette) return;
+        _paletteApplied = true;
+        using var layout = new FluentLayoutBatch(this);
         _palette = palette; BackColor = palette.Background; ForeColor = palette.Text;
         ApplyControlPalette(this, palette, false);
         foreach (var label in _secondaryLabels) label.ForeColor = palette.Secondary;
@@ -270,11 +253,15 @@ internal sealed partial class MainForm
 
     private static void ApplyControlPalette(Control control, FluentPalette palette, bool inSurface)
     {
+        var background = inSurface ? palette.Surface : palette.Background;
         if (control is IFluentControl fluent) fluent.Palette = palette;
         if (control is FluentSurface) inSurface = true;
-        if (control is Label) { control.BackColor = Color.Transparent; control.ForeColor = palette.Text; }
+        // Opaque child backgrounds avoid recursively repainting every transparent
+        // ancestor when a label, glyph or toggle changes. Surface corners retain
+        // their parent's background, while their children use the surface color.
+        if (control is Label) { control.BackColor = background; control.ForeColor = palette.Text; }
         else if (control is ComboBox or TextBox) { control.BackColor = palette.Surface; control.ForeColor = palette.Text; }
-        else if (control is not IFluentControl) control.BackColor = inSurface ? Color.Transparent : palette.Background;
+        else control.BackColor = background;
         foreach (Control child in control.Controls) ApplyControlPalette(child, palette, inSurface);
     }
 
@@ -284,8 +271,15 @@ internal sealed partial class MainForm
     protected override void WndProc(ref Message m)
     {
         base.WndProc(ref m);
-        if (m.Msg is 0x001A or 0x031A && IsHandleCreated && !Disposing)
-            BeginInvoke(new Action(() => { if (!IsDisposed) ApplyPalette(WindowsAppearance.ReadPalette()); }));
+        if (m.Msg is 0x001A or 0x031A && IsHandleCreated && !Disposing && !_appearanceUpdateQueued)
+        {
+            _appearanceUpdateQueued = true;
+            BeginInvoke(new Action(() =>
+            {
+                _appearanceUpdateQueued = false;
+                if (!IsDisposed && !Disposing) ApplyPalette(WindowsAppearance.ReadPalette());
+            }));
+        }
     }
 
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
@@ -318,23 +312,18 @@ internal sealed partial class MainForm
     private static FluentSurface Surface(Control content)
     { var surface = new FluentSurface(); surface.Controls.Add(content); return surface; }
 
-    private static TableLayoutPanel SettingsRow(FluentGlyph glyph, Control description, Control? action)
-    {
-        var row = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Top, ColumnCount = action is null ? 2 : 3, RowCount = 1, Margin = Padding.Empty };
-        row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        row.Controls.Add(new GlyphView(glyph), 0, 0); row.Controls.Add(description, 1, 0);
-        if (action is not null) { row.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); row.Controls.Add(action, 2, 0); }
-        return row;
-    }
+    private static FluentRowPanel SettingsRow(FluentGlyph glyph, Control description, Control? action) =>
+        new(new GlyphView(glyph), description, action);
 
-    private static Label TextLabel(string text) => new()
-    { Text = text, AutoSize = true, Dock = DockStyle.Top, BackColor = Color.Transparent, Margin = new Padding(0, 0, 0, 6) };
+    private static Label TextLabel(string text) => new FluentLabel
+    { Text = text, Dock = DockStyle.Top, BackColor = Color.Transparent, Margin = new Padding(0, 0, 0, 6) };
 
-    private static TableLayoutPanel VerticalPanel(int padding, params Control[] controls)
+    private static FluentStackPanel VerticalPanel(int padding, params Control[] controls)
     {
-        var panel = new TableLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, Dock = DockStyle.Top, ColumnCount = 1, RowCount = controls.Length, Padding = new Padding(padding), Margin = Padding.Empty };
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (var row = 0; row < controls.Length; row++) { panel.RowStyles.Add(new RowStyle(SizeType.AutoSize)); panel.Controls.Add(controls[row], 0, row); }
+        var panel = new FluentStackPanel { Padding = new Padding(padding) };
+        panel.SuspendLayout();
+        panel.Controls.AddRange(controls);
+        panel.ResumeLayout(performLayout: false);
         return panel;
     }
 }
