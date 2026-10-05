@@ -1,6 +1,7 @@
 using BatteryCharge.App;
 using BatteryCharge.Core;
 using System.Drawing.Imaging;
+using System.Reflection;
 
 namespace BatteryCharge.UiChecks;
 
@@ -56,6 +57,7 @@ internal static class Program
         var settings = Find<Button>(form, "SettingsNavigation");
         var overview = Find<Button>(form, "OverviewNavigation");
         await UntilAsync(() => refresh.Enabled && normal.IsCurrent);
+        CheckRendering();
         var scale = form.DeviceDpi / 96f;
         form.ClientSize = new Size((int)(1020 * scale), (int)(760 * scale));
         form.PerformLayout();
@@ -253,6 +255,123 @@ internal static class Program
 
     private static T Find<T>(Control parent, string name) where T : Control =>
         parent.Controls.Find(name, searchAllChildren: true).OfType<T>().Single();
+
+    private static void CheckRendering()
+    {
+        using var host = new Panel();
+        host.SuspendLayout();
+        foreach (var palette in new[] { FluentPalette.Light, FluentPalette.Dark })
+        {
+            host.BackColor = palette.Background;
+            using var button = new FluentButton { Kind = FluentButtonKind.Subtle, Glyph = FluentGlyph.Refresh,
+                Text = "A long original button label / 原来的按钮文字", AutoSize = false, Size = new Size(280, 48) };
+            using var toggle = new FluentToggle();
+            using var card = new ModeCard(ChargeMode.Normal) { Text = "Original mode / 原模式",
+                Description = "Original description / 原来的说明", CurrentText = "Current / 当前使用",
+                IsCurrent = true, AutoSize = false, Size = new Size(280, 260) };
+            using var glyph = new GlyphView(FluentGlyph.Refresh, 32);
+            using var meter = new BatteryMeter { Level = .7f };
+            foreach (var control in new Control[] { button, toggle, card, glyph, meter })
+            {
+                host.Controls.Add(control);
+                ((IFluentControl)control).Palette = palette;
+                control.BackColor = control is FluentToggle or GlyphView or BatteryMeter ? palette.Surface : palette.Background;
+                using var reused = NewCanvas();
+                PaintFrame(control, reused, control.ClientRectangle);
+                if (control == button)
+                {
+                    Raise(control, "OnMouseEnter", EventArgs.Empty);
+                    PaintFrame(control, reused, control.ClientRectangle);
+                    Raise(control, "OnKeyDown", new KeyEventArgs(Keys.Space));
+                    PaintFrame(control, reused, control.ClientRectangle);
+                    Raise(control, "OnKeyUp", new KeyEventArgs(Keys.Space));
+                    control.Text = "New / 新文字";
+                    Raise(control, "OnMouseLeave", EventArgs.Empty);
+                }
+                else if (control == toggle)
+                {
+                    toggle.Checked = true;
+                    PaintFrame(control, reused, control.ClientRectangle);
+                    toggle.Checked = false;
+                }
+                else if (control == card)
+                {
+                    card.Checked = true;
+                    PaintFrame(control, reused, control.ClientRectangle);
+                    card.Text = "New mode / 新模式";
+                    card.Description = "New / 新说明";
+                    card.Checked = card.IsCurrent = false;
+                }
+                else if (control == glyph) glyph.Glyph = FluentGlyph.Language;
+                else meter.Level = .3f;
+                control.Enabled = false;
+                PaintFrame(control, reused, control.ClientRectangle);
+                control.Enabled = true;
+                PaintFrame(control, reused, control.ClientRectangle);
+                using var fresh = NewCanvas();
+                PaintFrame(control, fresh, control.ClientRectangle);
+                AssertEqual(reused, fresh, $"{control.GetType().Name} retains old text, hover or selection pixels.");
+
+                // A translated target matches DrawToBitmap and buffered/partial paints.
+                // Text must honor that translation and leave every outside pixel alone.
+                var offset = new Point(19, 23);
+                var bounds = new Rectangle(offset, control.Size);
+                for (var y = 0; y < fresh.Height; y++)
+                for (var x = 0; x < fresh.Width; x++)
+                    if (!bounds.Contains(x, y))
+                        Assert(fresh.GetPixel(x, y).ToArgb() == Color.Magenta.ToArgb(),
+                            $"{control.GetType().Name} paints outside its bounds.");
+                foreach (var corner in new[] { offset, new Point(bounds.Right - 1, bounds.Top),
+                    new Point(bounds.Left, bounds.Bottom - 1), new Point(bounds.Right - 1, bounds.Bottom - 1) })
+                    Assert(fresh.GetPixel(corner.X, corner.Y).ToArgb() == control.BackColor.ToArgb(),
+                        $"{control.GetType().Name} leaves a black or unpainted corner.");
+
+                // Neither the background fill nor text may overwrite a partial clip.
+                using var partial = NewCanvas();
+                var clip = new Rectangle(30, 8, Math.Min(120, control.Width - 30), Math.Min(24, control.Height - 8));
+                PaintFrame(control, partial, clip);
+                clip.Offset(offset);
+                for (var y = 0; y < partial.Height; y++)
+                for (var x = 0; x < partial.Width; x++)
+                    Assert(partial.GetPixel(x, y).ToArgb() == (clip.Contains(x, y)
+                        ? fresh.GetPixel(x, y).ToArgb() : Color.Magenta.ToArgb()),
+                        $"{control.GetType().Name} ignores the partial repaint clip.");
+                host.Controls.Remove(control);
+            }
+        }
+        Console.WriteLine("PASS Repainting clears old text and states, preserves clips and leaves clean icon corners.");
+    }
+
+    private static Bitmap NewCanvas()
+    {
+        var bitmap = new Bitmap(340, 320);
+        using var graphics = Graphics.FromImage(bitmap);
+        graphics.Clear(Color.Magenta);
+        return bitmap;
+    }
+
+    private static void PaintFrame(Control control, Bitmap bitmap, Rectangle clip)
+    {
+        using var graphics = Graphics.FromImage(bitmap);
+        graphics.TranslateTransform(19, 23);
+        graphics.SetClip(clip);
+        using var args = new PaintEventArgs(graphics, clip);
+        // Mirror the WinForms paint pipeline: Opaque suppresses background painting.
+        var opaque = (bool)typeof(Control).GetMethod("GetStyle", BindingFlags.Instance | BindingFlags.NonPublic)!
+            .Invoke(control, [ControlStyles.Opaque])!;
+        if (!opaque) Raise(control, "OnPaintBackground", args);
+        Raise(control, "OnPaint", args);
+    }
+
+    private static void Raise(Control control, string method, EventArgs args) =>
+        typeof(Control).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(control, [args]);
+
+    private static void AssertEqual(Bitmap actual, Bitmap expected, string message)
+    {
+        for (var y = 0; y < actual.Height; y++)
+        for (var x = 0; x < actual.Width; x++)
+            Assert(actual.GetPixel(x, y).ToArgb() == expected.GetPixel(x, y).ToArgb(), message);
+    }
 
     private static async Task UntilAsync(Func<bool> predicate)
     {

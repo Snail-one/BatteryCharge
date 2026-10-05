@@ -51,9 +51,12 @@ internal sealed class FluentButton : Button, IFluentControl
     internal FluentButton()
     {
         SetStyle(ControlStyles.ResizeRedraw | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
+        // ButtonBase marks itself Opaque; our rounded painting needs a fresh background.
+        SetStyle(ControlStyles.Opaque, false);
         BackColor = Color.Transparent;
         FlatStyle = FlatStyle.Flat;
         FlatAppearance.BorderSize = 0;
+        UseVisualStyleBackColor = false;
         AutoSize = true;
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
         Padding = new Padding(15, 8, 15, 8);
@@ -71,15 +74,46 @@ internal sealed class FluentButton : Button, IFluentControl
     protected override void OnMouseLeave(EventArgs e) { _hover = _pressed = false; Invalidate(); base.OnMouseLeave(e); }
     protected override void OnMouseDown(MouseEventArgs e) { _pressed = e.Button == MouseButtons.Left; Invalidate(); base.OnMouseDown(e); }
     protected override void OnMouseUp(MouseEventArgs e) { _pressed = false; Invalidate(); base.OnMouseUp(e); }
-    protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
+    protected override void OnEnabledChanged(EventArgs e) { _hover = _pressed = false; Invalidate(); base.OnEnabledChanged(e); }
     protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
-    protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+    protected override void OnLostFocus(EventArgs e) { _pressed = false; Invalidate(); base.OnLostFocus(e); }
+    protected override void OnMouseCaptureChanged(EventArgs e)
+    {
+        if (!Capture) { _pressed = false; Invalidate(); }
+        base.OnMouseCaptureChanged(e);
+    }
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        if (Capture && e.Button.HasFlag(MouseButtons.Left))
+        {
+            var pressed = ClientRectangle.Contains(e.Location);
+            if (_pressed != pressed) { _pressed = pressed; Invalidate(); }
+        }
+        base.OnMouseMove(e);
+    }
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.KeyCode is Keys.Space or Keys.Enter) { _pressed = true; Invalidate(); }
+        base.OnKeyDown(e);
+    }
+    protected override void OnKeyUp(KeyEventArgs e)
+    {
+        if (e.KeyCode is Keys.Space or Keys.Enter) { _pressed = false; Invalidate(); }
+        base.OnKeyUp(e);
+    }
+    protected override void OnVisibleChanged(EventArgs e)
+    {
+        if (!Visible) _hover = _pressed = false;
+        base.OnVisibleChanged(e);
+    }
+    protected override void OnPaintBackground(PaintEventArgs e) => FluentDrawing.Background(this, e.Graphics);
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var scale = DeviceDpi / 96f;
         var accent = Kind == FluentButtonKind.Accent;
         var background = accent ? (Enabled ? Palette.Accent : Palette.Border)
-            : Selected ? Palette.AccentSoft : _hover || _pressed ? Palette.Hover : Kind is FluentButtonKind.Standard or FluentButtonKind.Danger ? Palette.Surface : Color.Transparent;
+            : Selected ? Palette.AccentSoft : Enabled && (_hover || _pressed) ? Palette.Hover : Kind is FluentButtonKind.Standard or FluentButtonKind.Danger ? Palette.Surface : Color.Transparent;
         var foreground = !Enabled ? Palette.Secondary : accent ? Palette.OnAccent
             : Selected ? Palette.Accent : Kind == FluentButtonKind.Danger ? Palette.Error : Palette.Text;
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -104,10 +138,10 @@ internal sealed class FluentButton : Button, IFluentControl
             x += (int)(28 * scale);
         }
         if (!IconOnly)
-            TextRenderer.DrawText(e.Graphics, Text, Font, new Rectangle(x, 0, Math.Max(1, Width - x - Padding.Right), Height), foreground,
+            FluentDrawing.Text(e.Graphics, Text, Font, new Rectangle(x, 0, Math.Max(1, Width - x - Padding.Right), Height), foreground,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | (Kind == FluentButtonKind.Navigation ? TextFormatFlags.Left : TextFormatFlags.HorizontalCenter));
         if (Focused && ShowFocusCues)
-            ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -4, -4), foreground, background);
+            FluentDrawing.Focus(e.Graphics, ClientRectangle, Palette.Accent, scale);
     }
 }
 
@@ -119,6 +153,11 @@ internal sealed class FluentToggle : CheckBox, IFluentControl
     internal FluentToggle()
     {
         SetStyle(ControlStyles.ResizeRedraw | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
+        // ButtonBase marks itself Opaque; our rounded painting needs a fresh background.
+        SetStyle(ControlStyles.Opaque, false);
+        FlatStyle = FlatStyle.Flat;
+        FlatAppearance.BorderSize = 0;
+        UseVisualStyleBackColor = false;
         AutoCheck = false;
         AutoSize = false;
         BackColor = Color.Transparent;
@@ -131,6 +170,8 @@ internal sealed class FluentToggle : CheckBox, IFluentControl
     protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
     protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
     protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+    protected override void OnPaintBackground(PaintEventArgs e) => FluentDrawing.Background(this, e.Graphics);
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var scale = DeviceDpi / 96f;
@@ -142,11 +183,11 @@ internal sealed class FluentToggle : CheckBox, IFluentControl
         e.Graphics.FillPath(fill, path); e.Graphics.DrawPath(pen, path);
         using var knob = new SolidBrush(Checked && Enabled ? Palette.OnAccent : Palette.Secondary);
         e.Graphics.FillEllipse(knob, rect.X + (Checked ? 23 : 4) * scale, rect.Y + 4 * scale, 12 * scale, 12 * scale);
-        TextRenderer.DrawText(e.Graphics, UiText.Get(Checked ? "On" : "Off"), Font,
+        FluentDrawing.Text(e.Graphics, UiText.Get(Checked ? "On" : "Off"), Font,
             new Rectangle((int)(50 * scale), 0, Math.Max(1, Width - (int)(50 * scale)), Height), Palette.Secondary,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         if (Focused && ShowFocusCues)
-            ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -1, -1), Palette.Text, Palette.Surface);
+            FluentDrawing.Focus(e.Graphics, ClientRectangle, Palette.Accent, scale);
     }
 }
 
@@ -206,7 +247,12 @@ internal sealed class ModeCard : RadioButton, IFluentControl
     {
         Mode = mode;
         SetStyle(ControlStyles.ResizeRedraw | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
+        // ButtonBase marks itself Opaque; our rounded painting needs a fresh background.
+        SetStyle(ControlStyles.Opaque, false);
         BackColor = Color.Transparent;
+        FlatStyle = FlatStyle.Flat;
+        FlatAppearance.BorderSize = 0;
+        UseVisualStyleBackColor = false;
         AutoCheck = false;
         AutoSize = true;
         Appearance = Appearance.Button;
@@ -248,6 +294,8 @@ internal sealed class ModeCard : RadioButton, IFluentControl
     protected override void OnEnabledChanged(EventArgs e) { Invalidate(); base.OnEnabledChanged(e); }
     protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
     protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
+    protected override void OnPaintBackground(PaintEventArgs e) => FluentDrawing.Background(this, e.Graphics);
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var scale = DeviceDpi / 96f;
@@ -265,8 +313,8 @@ internal sealed class ModeCard : RadioButton, IFluentControl
         e.Graphics.DrawEllipse(radioPen, radio);
         if (Checked) { using var dot = new SolidBrush(Palette.Accent); e.Graphics.FillEllipse(dot, RectangleF.Inflate(radio, -4 * scale, -4 * scale)); }
         var metrics = Measure(Width);
-        TextRenderer.DrawText(e.Graphics, Text, TitleFont, metrics.Title, foreground, TextFormatFlags.WordBreak);
-        TextRenderer.DrawText(e.Graphics, Description, Font, metrics.Description, Palette.Secondary, TextFormatFlags.WordBreak);
+        FluentDrawing.Text(e.Graphics, Text, TitleFont, metrics.Title, foreground, TextFormatFlags.WordBreak);
+        FluentDrawing.Text(e.Graphics, Description, Font, metrics.Description, Palette.Secondary, TextFormatFlags.WordBreak);
         if (IsCurrent)
         {
             var badge = metrics.Badge;
@@ -274,12 +322,12 @@ internal sealed class ModeCard : RadioButton, IFluentControl
             FluentDrawing.Glyph(e.Graphics, FluentGlyph.Check,
                 new RectangleF(badge.X, badge.Y + (badge.Height - 14 * scale) / 2, 14 * scale, 14 * scale), Palette.Success);
             var iconWidth = (int)Math.Ceiling(19 * scale);
-            TextRenderer.DrawText(e.Graphics, CurrentText, Font,
+            FluentDrawing.Text(e.Graphics, CurrentText, Font,
                 new Rectangle(badge.X + iconWidth, badge.Y, Math.Max(1, badge.Width - iconWidth), badge.Height),
                 Palette.Success, TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
         }
         if (Focused && ShowFocusCues)
-            ControlPaint.DrawFocusRectangle(e.Graphics, Rectangle.Inflate(ClientRectangle, -5, -5), Palette.Text, background);
+            FluentDrawing.Focus(e.Graphics, ClientRectangle, Palette.Accent, scale);
     }
 }
 
