@@ -3,6 +3,7 @@ using BatteryCharge.App;
 using System.Xml.Linq;
 using System.Globalization;
 using System.Drawing;
+using System.Runtime.InteropServices;
 
 // Dependency-free behavioral checks: no device access, test SDK, or test packages.
 var checks = new (string Name, Func<Task> Run)[]
@@ -24,6 +25,8 @@ var checks = new (string Name, Func<Task> Run)[]
     ("Disabled tasks and logon triggers are reported as disabled", DisabledStartupTask),
     ("Moved executable retains enabled state and reports stale path", MovedStartupExecutable),
     ("Foreign tasks and other users cannot be modified", ForeignStartupTask),
+    ("Missing startup tasks handle COM and mapped file-not-found exceptions", MissingStartupTask),
+    ("Startup lookup preserves existing tasks and propagates scheduler failures", StartupLookupFailures),
     ("Language choice is saved and survives restart", LanguagePreferenceRoundTrip),
     ("Missing, damaged and unsupported language settings fall back safely", LanguagePreferenceFallback),
     ("UI and driver errors switch languages independently of thread culture", LanguageResources),
@@ -252,6 +255,46 @@ static Task StartupTaskConfiguration()
         "A tray app must not be stopped after the scheduler's default time limit.");
     Assert((string?)task.Element(ns + "Triggers")?.Element(ns + "LogonTrigger")?.Element(ns + "UserId") == sid,
         "Startup must apply only to the selected user.");
+    return Task.CompletedTask;
+}
+
+static Task MissingStartupTask()
+{
+    const int fileNotFound = unchecked((int)0x80070002);
+    var mapped = Marshal.GetExceptionForHR(fileNotFound, new IntPtr(-1))!;
+    Assert(mapped is FileNotFoundException, "The runtime must map ERROR_FILE_NOT_FOUND to FileNotFoundException.");
+    foreach (var error in new Exception[] { new COMException("Task not found", fileNotFound), mapped })
+    {
+        var task = StartupTaskLookup.Find(() => throw error);
+        Assert(task is null, "A missing task must be treated as unregistered.");
+    }
+    return Task.CompletedTask;
+}
+
+static Task StartupLookupFailures()
+{
+    var existing = new object();
+    Assert(ReferenceEquals(StartupTaskLookup.Find(() => existing), existing),
+        "An existing task must be returned unchanged.");
+    foreach (var error in new Exception[]
+    {
+        new UnauthorizedAccessException("Access denied"),
+        new COMException("Scheduler unavailable", unchecked((int)0x800706BA)),
+        new DirectoryNotFoundException("Task folder unavailable"),
+        new InvalidOperationException("Unexpected scheduler failure")
+    })
+    {
+        try
+        {
+            StartupTaskLookup.Find(() => throw error);
+        }
+        catch (Exception actual)
+        {
+            Assert(ReferenceEquals(actual, error), "Task lookup must preserve the original scheduler error.");
+            continue;
+        }
+        throw new InvalidOperationException("A scheduler failure was incorrectly treated as a missing task.");
+    }
     return Task.CompletedTask;
 }
 

@@ -69,17 +69,8 @@ internal sealed class StartupManager
         });
     }
 
-    private object? FindTask(dynamic folder)
-    {
-        try
-        {
-            return folder.GetTask(_taskName);
-        }
-        catch (COMException error) when (error.HResult == unchecked((int)0x80070002))
-        {
-            return null;
-        }
-    }
+    private object? FindTask(dynamic folder) =>
+        StartupTaskLookup.Find(() => folder.GetTask(_taskName));
 
     internal void RemoveForCleanup()
     {

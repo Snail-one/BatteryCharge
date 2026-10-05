@@ -6,6 +6,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/BatteryCharge.Core/BatteryCharge.Core.csproj" />
     <Compile Include="../../src/BatteryCharge.App/StartupTaskDefinition.cs" Link="StartupTaskDefinition.cs" />
+    <Compile Include="../../src/BatteryCharge.App/StartupTaskLookup.cs" Link="StartupTaskLookup.cs" />
     <Compile Include="../../src/BatteryCharge.App/LanguagePreferences.cs" Link="LanguagePreferences.cs" />
     <Compile Include="../../src/BatteryCharge.App/CleanupService.cs" Link="CleanupService.cs" />
     <Compile Include="../../src/BatteryCharge.App/WindowBounds.cs" Link="WindowBounds.cs" />
