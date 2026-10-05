@@ -15,6 +15,7 @@ internal sealed partial class MainForm : Form
     private readonly FluentToggle _startup = new();
     private readonly FluentButton _cleanup = new() { Kind = FluentButtonKind.Danger };
     private readonly Label _startupInfo = TextLabel(T("ReadingStartup"));
+    private readonly Label _startupPaths = TextLabel("");
     private readonly IStartupManager _startupManager;
     private readonly string _preferencesPath;
     private readonly ChargeIcons _icons = new();
@@ -324,8 +325,15 @@ internal sealed partial class MainForm : Form
         _startup.Checked = enabled;
         _startupItem.Checked = enabled;
         _startupItem.Text = T("StartupToggle");
-        SetStartupInfo(enabled && !registration.UsesCurrentPath
-            ? T("StartupMoved") : T(enabled ? "StartupOn" : "StartupOff"));
+        var pathMismatch = !registration.UsesCurrentPath;
+        SetStartupInfo(pathMismatch
+            ? T(enabled ? "StartupMoved" : "StartupPathMismatch") : T(enabled ? "StartupOn" : "StartupOff"),
+            error: pathMismatch);
+        using var scroll = _viewport.PreserveScroll();
+        using var layout = new FluentLayoutBatch(_shell);
+        _startupPaths.Text = T("StartupCurrentPath", registration.CurrentExecutablePath ?? Environment.ProcessPath)
+            + Environment.NewLine + T("StartupRegisteredPath", registration.RegisteredExecutablePath ?? T("StartupPathNotConfigured"));
+        _startupWarning.Visible = pathMismatch;
     }
 
     private async Task ToggleStartupAsync()

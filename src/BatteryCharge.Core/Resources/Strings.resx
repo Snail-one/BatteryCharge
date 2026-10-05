@@ -108,6 +108,24 @@
   <data xml:space="preserve" name="StartupMoved">
     <value>已开启，但程序位置已变化；请关闭后重新开启以更新路径。</value>
   </data>
+  <data xml:space="preserve" name="StartupPathWarningTitle">
+    <value>自动启动路径不一致</value>
+  </data>
+  <data xml:space="preserve" name="StartupPathMismatch">
+    <value>计划任务中的启动路径与当前运行程序不一致，请在应用设置中重新配置自动启动。</value>
+  </data>
+  <data xml:space="preserve" name="StartupReview">
+    <value>查看启动设置</value>
+  </data>
+  <data xml:space="preserve" name="StartupCurrentPath">
+    <value>当前程序路径：{0}</value>
+  </data>
+  <data xml:space="preserve" name="StartupRegisteredPath">
+    <value>计划任务路径：{0}</value>
+  </data>
+  <data xml:space="preserve" name="StartupPathNotConfigured">
+    <value>未配置</value>
+  </data>
   <data xml:space="preserve" name="StartupOn">
     <value>已开启：登录后自动运行并收起到托盘。移动程序后请重新开启。</value>
   </data>

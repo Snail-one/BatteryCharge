@@ -459,6 +459,15 @@ static Task MovedStartupExecutable()
     var xml = StartupTaskDefinition.Create(sid, @"D:\Old\BatteryCharge.exe");
     var status = StartupTaskDefinition.Read(xml, sid, @"D:\New\BatteryCharge.exe");
     Assert(status.Enabled && !status.UsesCurrentPath, "An active task at an old path must not look disabled.");
+    Assert(status.CurrentExecutablePath == @"D:\New\BatteryCharge.exe"
+        && status.RegisteredExecutablePath == @"D:\Old\BatteryCharge.exe",
+        "Both paths must be retained so the UI can explain the mismatch.");
+    XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
+    var disabled = XElement.Parse(xml);
+    disabled.Element(ns + "Settings")!.Element(ns + "Enabled")!.Value = "false";
+    status = StartupTaskDefinition.Read(disabled.ToString(), sid, @"D:\New\BatteryCharge.exe");
+    Assert(!status.Enabled && !status.UsesCurrentPath && status.RegisteredExecutablePath == @"D:\Old\BatteryCharge.exe",
+        "A disabled task must still expose its stale startup path.");
     return Task.CompletedTask;
 }
 

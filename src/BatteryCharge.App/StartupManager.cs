@@ -25,7 +25,7 @@ internal sealed class StartupManager : IStartupManager
         object? task = FindTask(folder);
         try
         {
-            return task is null ? new StartupRegistration(false, true)
+            return task is null ? new StartupRegistration(false, true, _executablePath)
                 : StartupTaskDefinition.Read((string)((dynamic)task).Xml, _userSid, _executablePath, ResolveUserSid);
         }
         finally

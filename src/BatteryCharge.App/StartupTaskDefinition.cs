@@ -3,7 +3,8 @@ using BatteryCharge.Core;
 
 namespace BatteryCharge.App;
 
-internal sealed record StartupRegistration(bool Enabled, bool UsesCurrentPath);
+internal sealed record StartupRegistration(bool Enabled, bool UsesCurrentPath,
+    string? CurrentExecutablePath = null, string? RegisteredExecutablePath = null);
 
 internal static class StartupTaskDefinition
 {
@@ -69,9 +70,10 @@ internal static class StartupTaskDefinition
             && actions is { Length: 1 }
             && actions[0].Name == Ns + "Exec"
             && (string?)actions[0].Element(Ns + "Arguments") == "--startup";
-        var usesCurrentPath = actions is { Length: 1 }
-            && string.Equals((string?)actions[0].Element(Ns + "Command"), executablePath, StringComparison.OrdinalIgnoreCase);
-        return new StartupRegistration(enabled, usesCurrentPath);
+        var registeredPath = actions is { Length: 1 } && actions[0].Name == Ns + "Exec"
+            ? (string?)actions[0].Element(Ns + "Command") : null;
+        var usesCurrentPath = string.Equals(registeredPath, executablePath, StringComparison.OrdinalIgnoreCase);
+        return new StartupRegistration(enabled, usesCurrentPath, executablePath, registeredPath);
     }
 
     private static bool MatchesUser(string? taskUserId, string userSid, Func<string, string?>? resolveUserSid)

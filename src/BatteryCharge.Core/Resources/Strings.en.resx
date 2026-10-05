@@ -108,6 +108,24 @@
   <data xml:space="preserve" name="StartupMoved">
     <value>Enabled, but the app has moved. Turn startup off and on again to update its path.</value>
   </data>
+  <data xml:space="preserve" name="StartupPathWarningTitle">
+    <value>Startup path mismatch</value>
+  </data>
+  <data xml:space="preserve" name="StartupPathMismatch">
+    <value>The scheduled startup path differs from the running app. Reconfigure startup in app settings.</value>
+  </data>
+  <data xml:space="preserve" name="StartupReview">
+    <value>Review startup settings</value>
+  </data>
+  <data xml:space="preserve" name="StartupCurrentPath">
+    <value>Running app path: {0}</value>
+  </data>
+  <data xml:space="preserve" name="StartupRegisteredPath">
+    <value>Scheduled task path: {0}</value>
+  </data>
+  <data xml:space="preserve" name="StartupPathNotConfigured">
+    <value>Not configured</value>
+  </data>
   <data xml:space="preserve" name="StartupOn">
     <value>Enabled: starts in the tray after sign-in. If you move the app, turn startup off and on again.</value>
   </data>

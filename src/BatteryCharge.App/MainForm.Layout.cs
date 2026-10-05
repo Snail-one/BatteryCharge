@@ -27,6 +27,7 @@ internal sealed partial class MainForm
     private FluentStackPanel _settingsPage = null!;
     private FlowLayoutPanel _compactNavigation = null!;
     private FluentSurface _diagnostics = null!;
+    private FluentSurface _startupWarning = null!;
     private ChargeMode _selectedMode = ChargeMode.Normal;
     private bool _settingsVisible;
     private bool _updatingResponsiveLayout;
@@ -54,8 +55,9 @@ internal sealed partial class MainForm
         trayHint.Dock = DockStyle.Bottom;
         _sidebar.Controls.Add(trayHint);
         _shell.Controls.Add(_sidebar, 0, 0);
-        var main = new FluentTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(24, 26, 24, 16), Margin = Padding.Empty };
+        var main = new FluentTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(24, 26, 24, 16), Margin = Padding.Empty };
         main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -73,6 +75,22 @@ internal sealed partial class MainForm
         _refresh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         _refresh.Margin = new Padding(12, 5, 0, 0);
         main.Controls.Add(header, 0, 1);
+        var warningTitle = SectionTitle("StartupPathWarningTitle");
+        warningTitle.Name = "StartupPathWarningTitle";
+        var warningMessage = Localized(TextLabel(""), "StartupPathMismatch");
+        var reviewStartup = Localized(new FluentButton
+        { Kind = FluentButtonKind.Standard, Glyph = FluentGlyph.Settings, Name = "ReviewStartupButton" }, "StartupReview");
+        reviewStartup.Click += (_, _) =>
+        {
+            SetPage(true);
+            _viewport.ScrollControlIntoView(_startupInfo);
+        };
+        _startupWarning = Surface(SettingsRow(FluentGlyph.Info,
+            VerticalPanel(0, warningTitle, warningMessage), reviewStartup));
+        _startupWarning.Name = "StartupPathWarning";
+        _startupWarning.Padding = new Padding(16);
+        _startupWarning.Visible = false;
+        main.Controls.Add(_startupWarning, 0, 2);
         _viewport = new FluentViewport { Dock = DockStyle.Fill, Margin = Padding.Empty, Name = "PageViewport" };
         _overviewPage = BuildOverview();
         _settingsPage = BuildSettings();
@@ -81,14 +99,14 @@ internal sealed partial class MainForm
         _settingsPage.Visible = false;
         _viewport.Controls.Add(_settingsPage);
         _viewport.Controls.Add(_overviewPage);
-        main.Controls.Add(_viewport, 0, 2);
+        main.Controls.Add(_viewport, 0, 3);
         var footer = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, Margin = new Padding(0, 14, 0, 0) };
         var quit = Localized(new FluentButton { Kind = FluentButtonKind.Subtle, Glyph = FluentGlyph.Exit, Name = "ExitButton" }, "Quit");
         quit.Click += (_, _) => Quit();
         var hide = Localized(new FluentButton { Kind = FluentButtonKind.Subtle, Glyph = FluentGlyph.Tray, Name = "HideButton" }, "Hide");
         hide.Click += (_, _) => Hide();
         footer.Controls.Add(quit); footer.Controls.Add(hide);
-        main.Controls.Add(footer, 0, 3);
+        main.Controls.Add(footer, 0, 4);
         _shell.Controls.Add(main, 1, 0);
         Controls.Add(_shell);
         _overviewNav.Click += (_, _) => SetPage(false);
@@ -106,6 +124,7 @@ internal sealed partial class MainForm
         _powerTimer.Start();
         _apply.Name = "ApplyModeButton"; _night.Name = "NightChargeButton"; _startup.Name = "StartupToggle";
         _nightState.Name = "NightChargeState";
+        _startupInfo.Name = "StartupInfo"; _startupPaths.Name = "StartupPaths";
         _compactOverview.Name = "CompactOverviewNavigation"; _compactSettings.Name = "CompactSettingsNavigation";
         _detailsButton.Name = "DiagnosticToggleButton";
         _languagePicker.Name = "LanguagePicker"; _details.Name = "DiagnosticDetails"; _refresh.Name = "RefreshButton";
@@ -171,7 +190,9 @@ internal sealed partial class MainForm
         _languagePicker.Anchor = AnchorStyles.Right; _languagePicker.Margin = new Padding(16, 0, 0, 0);
         var language = SettingsRow(FluentGlyph.Language, VerticalPanel(0, SectionTitle("LanguageMenu"), Secondary("LanguageHint")), _languagePicker);
         _startup.Text = _startup.AccessibleName = T("StartupToggle");
-        var startup = SettingsRow(FluentGlyph.Startup, VerticalPanel(0, SectionTitle("StartupToggle"), _startupInfo), _startup);
+        _secondaryLabels.Add(_startupPaths);
+        var startup = SettingsRow(FluentGlyph.Startup,
+            VerticalPanel(0, SectionTitle("StartupToggle"), _startupInfo, _startupPaths), _startup);
         var cleanup = SettingsRow(FluentGlyph.Settings, VerticalPanel(0, SectionTitle("CleanupTitle"), Secondary("CleanupHint")), Localized(_cleanup, "Cleanup"));
         _cleanup.Margin = new Padding(16, 0, 0, 0); _cleanup.Anchor = AnchorStyles.Right;
         return VerticalPanel(0, Surface(language), Surface(startup),
@@ -253,6 +274,13 @@ internal sealed partial class MainForm
         using var layout = new FluentLayoutBatch(this);
         _palette = palette; BackColor = palette.Background; ForeColor = palette.Text;
         ApplyControlPalette(this, palette, false);
+        var warningPalette = palette with
+        {
+            Surface = SystemInformation.HighContrast ? palette.Surface
+                : palette.IsDark ? Color.FromArgb(83, 35, 40) : Color.FromArgb(255, 226, 226),
+            Border = palette.Error, Text = palette.Error, Secondary = palette.Error, Accent = palette.Error
+        };
+        ApplyControlPalette(_startupWarning, warningPalette, false);
         foreach (var label in _secondaryLabels) label.ForeColor = palette.Secondary;
         _nightState.ForeColor = _snapshot?.NightCharge.IsAvailable == false ? palette.Error : palette.Secondary;
         _startupInfo.ForeColor = _startupHasError ? palette.Error : palette.Secondary;

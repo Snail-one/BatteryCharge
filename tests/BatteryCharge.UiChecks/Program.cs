@@ -128,6 +128,79 @@ internal static class Program
         await CheckSlowReadAsync(form, transport, refresh);
         await CheckRefreshPositionAsync(form, transport);
         await CheckNightChargeAsync(form, transport, screenshots);
+        await CheckStartupWarningAsync(form, transport, startup, screenshots);
+    }
+
+    private static async Task CheckStartupWarningAsync(MainForm form, PreviewTransport transport,
+        PreviewStartup startup, string screenshots)
+    {
+        const string oldPath = @"D:\Old\BatteryCharge.exe";
+        var refresh = Find<Button>(form, "RefreshButton");
+        var language = Find<ComboBox>(form, "LanguagePicker");
+        var toggle = Find<CheckBox>(form, "StartupToggle");
+        var warning = Find<FluentSurface>(form, "StartupPathWarning");
+        var title = Find<Label>(form, "StartupPathWarningTitle");
+        var paths = Find<Label>(form, "StartupPaths");
+        var viewport = Find<Panel>(form, "PageViewport");
+        var writes = transport.Writes.Count;
+        var changes = startup.Changes;
+        startup.SimulateTask(true, oldPath);
+        foreach (var languageIndex in new[] { 0, 1 })
+        {
+            language.SelectedIndex = languageIndex;
+            await UntilAsync(() => language.Enabled && refresh.Enabled);
+            refresh.PerformClick();
+            await UntilAsync(() => refresh.Enabled);
+            foreach (var palette in new[] { FluentPalette.Light, FluentPalette.Dark })
+            {
+                form.ApplyPalette(palette);
+                var scale = form.DeviceDpi / 96f;
+                form.ClientSize = new Size((int)(640 * scale), (int)(620 * scale));
+                foreach (var settings in new[] { false, true })
+                {
+                    Navigate(form, settings);
+                    viewport.AutoScrollPosition = new Point(0, 10000);
+                    await Task.Delay(20);
+                    Assert(warning.Visible && title.Text == UiText.Get("StartupPathWarningTitle"),
+                        "A stale path must have a visible warning on both pages, including after scrolling.");
+                    Assert(title.Font.Bold && title.ForeColor == palette.Error && warning.Palette.Border == palette.Error,
+                        "The path warning must use a bold title and the theme's error color.");
+                    if (!SystemInformation.HighContrast)
+                        Assert(warning.Palette.Surface != palette.Surface, "The warning background must stand out from normal cards.");
+                    Assert(form.ClientRectangle.Contains(form.RectangleToClient(warning.RectangleToScreen(warning.ClientRectangle))),
+                        "The path warning must fit inside the window at narrow widths.");
+                }
+                Navigate(form, false);
+                Capture(form, Path.Combine(screenshots, $"startup-warning-{UiText.Language}-{(palette.IsDark ? "dark" : "light")}.png"));
+            }
+            Find<Button>(form, "ReviewStartupButton").PerformClick();
+            Assert(Find<Panel>(form, "SettingsPage").Visible && paths.Text.Contains(oldPath)
+                && paths.Text.Contains(PreviewStartup.CurrentPath), "Reviewing startup must show both actual paths in settings.");
+            refresh.PerformClick();
+            await UntilAsync(() => refresh.Enabled);
+            Assert(warning.Visible, "A successful device refresh must not clear a stale startup path warning.");
+        }
+        Assert(startup.Changes == changes, "Displaying or reviewing a warning must not modify the startup task.");
+        startup.SimulateTask(false, oldPath);
+        refresh.PerformClick();
+        await UntilAsync(() => refresh.Enabled);
+        Assert(warning.Visible && !toggle.Checked, "A disabled task must not hide a path mismatch.");
+        toggle.AccessibilityObject.DoDefaultAction();
+        await UntilAsync(() => toggle.Enabled && toggle.Checked);
+        Assert(!warning.Visible && startup.RegisteredPath == PreviewStartup.CurrentPath,
+            "Enabling startup must update the path and clear the warning.");
+        startup.SimulateTask(true, oldPath);
+        refresh.PerformClick();
+        await UntilAsync(() => refresh.Enabled);
+        toggle.AccessibilityObject.DoDefaultAction();
+        await UntilAsync(() => toggle.Enabled && !toggle.Checked);
+        Assert(!warning.Visible && startup.RegisteredPath is null, "Removing the task must clear its path warning.");
+        toggle.AccessibilityObject.DoDefaultAction();
+        await UntilAsync(() => toggle.Enabled && toggle.Checked);
+        Assert(!warning.Visible && startup.RegisteredPath == PreviewStartup.CurrentPath,
+            "Turning startup off and on must register the current executable path.");
+        Assert(transport.Writes.Count == writes, "Startup path checks must not write to the device.");
+        Console.WriteLine("PASS Startup path warnings stay prominent on both pages and clear after reconfiguration.");
     }
 
     private static async Task CheckNightChargeAsync(MainForm form, PreviewTransport transport, string screenshots)
@@ -543,10 +616,14 @@ internal static class Program
 
 internal sealed class PreviewStartup : IStartupManager
 {
+    internal const string CurrentPath = @"D:\New\BatteryCharge.exe";
     internal bool Enabled { get; private set; }
     internal int Changes { get; private set; }
-    public StartupRegistration Read() => new(Enabled, true);
-    public void SetEnabled(bool enabled) { Enabled = enabled; Changes++; }
+    internal string? RegisteredPath { get; private set; }
+    public StartupRegistration Read() => new(Enabled, RegisteredPath is null || RegisteredPath == CurrentPath,
+        CurrentPath, RegisteredPath);
+    internal void SimulateTask(bool enabled, string? path) { Enabled = enabled; RegisteredPath = path; }
+    public void SetEnabled(bool enabled) { Enabled = enabled; RegisteredPath = enabled ? CurrentPath : null; Changes++; }
     public void RemoveForCleanup() => SetEnabled(false);
 }
 
