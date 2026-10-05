@@ -49,6 +49,14 @@ foreach (var check in checks)
         await check.Run();
         Console.WriteLine($"PASS {check.Name}");
     }
+    catch (FileLoadException error) when (error.HResult == unchecked((int)0x800711C7))
+    {
+        Console.Error.WriteLine($"BLOCKED Windows Application Control prevented loading: {error.FileName}");
+        Console.Error.WriteLine("Behavior checks could not complete; publishing must stop. This is an execution-policy block, not a failed behavior assertion.");
+        Console.Error.WriteLine("Inspect Event ID 3077 in Event Viewer > Applications and Services Logs > Microsoft > Windows > CodeIntegrity > Operational.");
+        Console.Error.WriteLine("Have the applicable policy trust this build/signature, or run checks in an approved development environment. PowerShell -ExecutionPolicy Bypass does not override Application Control.");
+        return 1;
+    }
     catch (Exception error)
     {
         failures++;

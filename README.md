@@ -163,6 +163,17 @@ git push origin v1.0.1
 
 `.github/dependabot.yml` 配置 Dependabot 每周一检查 GitHub Actions、`global.json` 中的 .NET SDK 和四个项目的 NuGet 依赖，发现更新时自动创建 PR。Actions 和 NuGet 更新分别合并为一组，SDK 不跨主版本升级，保持 .NET 10。当前没有第三方 NuGet 包，该配置也覆盖后续加入的包。Dependabot PR 不触发上述构建，也不会自动合并；配置进入 GitHub 默认分支后生效。配置选项见 [GitHub Dependabot 文档](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference)。
 
+如果 Windows 检查出现 `FileLoadException`、`0x800711C7` 和 `An Application Control policy has blocked this file`，表示系统策略拦截了程序集加载，检查无法完成；发布会停止。检查程序会在首次遇到这个错误时报告 `BLOCKED` 并退出，不继续重复报告功能失败。`-ExecutionPolicy Bypass` 只影响 PowerShell 脚本执行策略，不能解除 DLL 的应用控制拦截。使用下面的只读命令查看近期拦截事件，找到包含 `BatteryCharge.Core.dll` 的记录及其策略名称或 ID：
+
+```powershell
+Get-WinEvent -FilterHashtable @{
+    LogName = 'Microsoft-Windows-CodeIntegrity/Operational'
+    Id = 3077
+} -MaxEvents 10 | Format-List TimeCreated, Message
+```
+
+具体来源可能是 Smart App Control 或其他 App Control 策略，需要根据事件确认。受管理设备应由策略管理员批准开发构建或签名；也可在允许开发构建的环境中运行检查。生成或下载的发布程序仍受运行机器的应用控制策略约束。参见 [微软 App Control 事件说明](https://learn.microsoft.com/en-us/windows/security/application-security/application-control/app-control-for-business/operations/event-id-explanations) 和 [PowerShell 执行策略](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies)。
+
 ## Windows 实机验证
 
 1. 启动程序并接受管理员权限请求；确认初始状态或具体失败原因。
