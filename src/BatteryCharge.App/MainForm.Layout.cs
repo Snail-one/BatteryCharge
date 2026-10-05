@@ -170,7 +170,7 @@ internal sealed partial class MainForm
         _languagePicker.Anchor = AnchorStyles.Right; _languagePicker.Margin = new Padding(16, 0, 0, 0);
         var language = SettingsRow(FluentGlyph.Language, VerticalPanel(0, SectionTitle("LanguageMenu"), Secondary("LanguageHint")), _languagePicker);
         _startup.Text = _startup.AccessibleName = T("StartupToggle");
-        var startup = SettingsRow(FluentGlyph.Tray, VerticalPanel(0, SectionTitle("StartupToggle"), _startupInfo), _startup);
+        var startup = SettingsRow(FluentGlyph.Startup, VerticalPanel(0, SectionTitle("StartupToggle"), _startupInfo), _startup);
         var cleanup = SettingsRow(FluentGlyph.Settings, VerticalPanel(0, SectionTitle("CleanupTitle"), Secondary("CleanupHint")), Localized(_cleanup, "Cleanup"));
         _cleanup.Margin = new Padding(16, 0, 0, 0); _cleanup.Anchor = AnchorStyles.Right;
         return VerticalPanel(0, Surface(language), Surface(startup),

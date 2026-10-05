@@ -2,7 +2,7 @@ using System.Drawing.Drawing2D;
 
 namespace BatteryCharge.App;
 
-internal enum FluentGlyph { Battery, Overview, Settings, Plug, Leaf, Bolt, Moon, Language, Refresh, Tray, Exit, Info, Check }
+internal enum FluentGlyph { Battery, Overview, Settings, Plug, Leaf, Bolt, Moon, Language, Refresh, Startup, Tray, Exit, Info, Check }
 
 internal static class FluentDrawing
 {
@@ -124,10 +124,21 @@ internal static class FluentDrawing
                     graphics.DrawArc(pen, 4, 4, 16, 16, 45, 290);
                     graphics.DrawLines(pen, [new(20, 4), new(20, 10), new(14, 10)]);
                     break;
+                case FluentGlyph.Startup:
+                    using (var screen = Rounded(new RectangleF(3, 3, 18, 14), 2)) graphics.DrawPath(pen, screen);
+                    graphics.DrawArc(pen, 8, 5, 8, 8, -45, 270);
+                    graphics.DrawLine(pen, 12, 4.5f, 12, 8.5f);
+                    graphics.DrawLine(pen, 12, 17, 12, 21);
+                    graphics.DrawLine(pen, 8, 21, 16, 21);
+                    break;
                 case FluentGlyph.Tray:
-                    graphics.DrawLines(pen, [new(3, 14), new(3, 20), new(21, 20), new(21, 14)]);
-                    graphics.DrawLine(pen, 12, 3, 12, 15);
-                    graphics.DrawLines(pen, [new(7, 10), new(12, 15), new(17, 10)]);
+                    using (var window = Rounded(new RectangleF(3, 3, 18, 12), 2)) graphics.DrawPath(pen, window);
+                    graphics.DrawLine(pen, 3, 8, 21, 8);
+                    graphics.DrawLine(pen, 15, 5.5f, 18, 5.5f);
+                    using (var taskbar = Rounded(new RectangleF(3, 18, 18, 3), 1)) graphics.DrawPath(pen, taskbar);
+                    graphics.DrawLine(pen, 6, 19.5f, 9, 19.5f);
+                    graphics.FillEllipse(brush, 15, 18.75f, 1.5f, 1.5f);
+                    graphics.FillEllipse(brush, 18, 18.75f, 1.5f, 1.5f);
                     break;
                 case FluentGlyph.Exit:
                     graphics.DrawArc(pen, 4, 4, 16, 16, -60, 300); graphics.DrawLine(pen, 12, 2, 12, 12);
