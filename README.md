@@ -154,12 +154,14 @@ dotnet run --project tests/BatteryCharge.Checks/BatteryCharge.Checks.csproj -c R
 
 Windows 界面检查使用模拟设备与模拟启动注册，运行实际窗口并生成中英文、明暗主题、窄窗口和错误状态的截图，执行命令与检查范围见 [桌面 UI 设计](docs/desktop-ui.md)。
 
-根目录的 `.github/workflows/build.yml` 仅在推送任意名称的 tag 时运行；普通分支推送、PR 和手动操作不触发构建。工作流执行 Linux 和 Windows 行为检查、Windows 界面检查，并生成界面截图与两个 Windows 发布包，只构建和上传产物，不发布 Release。例如：
+根目录的 `.github/workflows/build.yml` 仅在推送 tag 时运行；普通分支推送、PR 和手动操作不触发构建。工作流执行 Linux 和 Windows 行为检查、Windows 界面检查，并上传界面截图（`BatteryCharge-ui`）和一个 Windows x64 发布包。发布包按“名字-Windows-架构-版本”命名，例如 tag `v1.0.1` 对应 `BatteryCharge-Windows-x64-1.0.1.zip`；程序内的版本号也采用 tag 版本。标签支持 `v1.0.1`、`1.0.1` 和 `v1.0.1-rc.1` 等版本格式，前导 `v` 不计入版本号。CI 只生成不包含 .NET 运行时的版本，运行电脑需安装 .NET 10 桌面运行时。构建和检查全部通过后，工作流自动创建对应 tag 的 GitHub Release 并附上 ZIP 文件；预发布版本标记为 Pre-release，重复运行时更新同名附件并保留现有说明。例如：
 
 ```bash
 git tag v1.0.1
 git push origin v1.0.1
 ```
+
+Release Notes 使用 GitHub 的 `--generate-notes` 自动生成，包含版本间合并的 Pull Request、贡献者和完整变更链接；没有合并 PR 的直接提交可通过完整变更链接查看。工作流使用内置 `GITHUB_TOKEN`，仅 Windows 发布作业申请 `contents: write`，无需配置个人令牌。说明见 [GitHub 自动生成 Release Notes](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes)。
 
 `.github/dependabot.yml` 配置 Dependabot 每周一检查 GitHub Actions、`global.json` 中的 .NET SDK 和四个项目的 NuGet 依赖，发现更新时自动创建 PR。Actions 和 NuGet 更新分别合并为一组，SDK 不跨主版本升级，保持 .NET 10。当前没有第三方 NuGet 包，该配置也覆盖后续加入的包。Dependabot PR 不触发上述构建，也不会自动合并；配置进入 GitHub 默认分支后生效。配置选项见 [GitHub Dependabot 文档](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference)。
 

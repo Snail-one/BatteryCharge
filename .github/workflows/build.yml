@@ -22,11 +22,19 @@ jobs:
   build-windows:
     needs: check-core
     runs-on: windows-latest
-    strategy:
-      matrix:
-        self-contained: [false, true]
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
+      - name: Resolve version from tag
+        id: release
+        shell: pwsh
+        run: |
+          $version = $env:GITHUB_REF_NAME -replace '^v', ''
+          if ($version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$') {
+            throw 'Use a version tag such as v1.0.1, 1.0.1 or v1.0.1-rc.1.'
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
@@ -37,17 +45,44 @@ jobs:
       - uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: BatteryCharge-ui-self-contained-${{ matrix.self-contained }}
+          name: BatteryCharge-ui
           path: artifacts/ui/
           if-no-files-found: warn
       - name: Publish Windows x64 application
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
         run: >-
           dotnet publish src/BatteryCharge.App/BatteryCharge.App.csproj
-          -c Release -r win-x64 --self-contained ${{ matrix.self-contained }}
+          -c Release -r win-x64 --self-contained false
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:Version="$env:RELEASE_VERSION"
           -p:PublishTrimmed=false -p:DebugType=embedded -o artifacts/app
+      - name: Package Windows application
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        shell: pwsh
+        run: |
+          Compress-Archive -Path artifacts/app/* -DestinationPath "artifacts/BatteryCharge-Windows-x64-$env:RELEASE_VERSION.zip"
       - uses: actions/upload-artifact@v7
         with:
-          name: BatteryCharge-win-x64-self-contained-${{ matrix.self-contained }}
-          path: artifacts/app/
+          name: BatteryCharge-Windows-x64-${{ steps.release.outputs.version }}
+          path: artifacts/BatteryCharge-Windows-x64-${{ steps.release.outputs.version }}.zip
           if-no-files-found: error
+      - name: Publish GitHub Release with generated notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        shell: pwsh
+        run: |
+          $package = "artifacts/BatteryCharge-Windows-x64-$env:RELEASE_VERSION.zip"
+          $existingRelease = gh release view "$env:GITHUB_REF_NAME" --repo "$env:GITHUB_REPOSITORY" --json tagName 2>$null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "$env:GITHUB_REF_NAME" "$package" --repo "$env:GITHUB_REPOSITORY" --clobber
+          } else {
+            $releaseArgs = @('release', 'create', $env:GITHUB_REF_NAME, $package,
+              '--repo', $env:GITHUB_REPOSITORY, '--verify-tag',
+              '--title', "BatteryCharge $env:RELEASE_VERSION", '--generate-notes')
+            if ($env:RELEASE_VERSION -match '^\d+\.\d+\.\d+-') { $releaseArgs += '--prerelease' }
+            gh @releaseArgs
+          }
+          if ($LASTEXITCODE -ne 0) { throw "GitHub Release publishing failed ($LASTEXITCODE)." }
