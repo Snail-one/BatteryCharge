@@ -11,7 +11,7 @@ internal sealed partial class MainForm : Form
     private readonly ToolStripMenuItem _languageMenu = new();
     private readonly Dictionary<string, ToolStripMenuItem> _languageItems = [];
     private readonly FluentButton _apply = new() { Kind = FluentButtonKind.Accent };
-    private readonly FluentToggle _night = new();
+    private readonly FluentButton _night = new() { Kind = FluentButtonKind.Standard, Glyph = FluentGlyph.Moon };
     private readonly FluentToggle _startup = new();
     private readonly FluentButton _cleanup = new() { Kind = FluentButtonKind.Danger };
     private readonly Label _startupInfo = TextLabel(T("ReadingStartup"));
@@ -425,7 +425,6 @@ internal sealed partial class MainForm : Form
             {
                 _modeState.Text = T("ModeReadUnknown");
                 _nightState.Text = T("NightReadUnknown");
-                _night.Checked = false;
                 foreach (var item in _modeItems.Values)
                     item.Checked = false;
                 _nightItem.Checked = false;
@@ -472,8 +471,9 @@ internal sealed partial class MainForm : Form
             pair.Value.IsCurrent = pair.Key == mode;
 
         var night = _snapshot.NightCharge.Value;
-        _nightState.Text = night.HasValue ? T("CurrentState", T(night.Value ? "On" : "Off")) : T("NightUnavailable");
-        _night.Checked = night == true;
+        _nightState.Text = night.HasValue ? T("CurrentState", T(night.Value ? "On" : "Off"))
+            : _snapshot.NightCharge.Error is string error ? T("NightUnavailableReason", error) : T("NightUnavailable");
+        _nightState.ForeColor = night.HasValue ? _palette.Secondary : _palette.Error;
         _nightItem.Checked = night == true;
         foreach (var pair in _modeItems)
             pair.Value.Checked = mode == pair.Key;
@@ -530,6 +530,10 @@ internal sealed partial class MainForm : Form
         foreach (var item in _modeItems.Values)
             item.Enabled = modeAvailable;
         _night.Enabled = idle && _snapshot?.NightCharge.IsAvailable == true;
+        _night.Text = T(_snapshot?.NightCharge.Value switch
+        { true => "DisableNightCharge", false => "EnableNightCharge", _ => "NightUnavailable" });
+        _night.AccessibleName = _night.Text;
+        _night.AccessibleDescription = _nightState.Text;
         _nightItem.Enabled = _night.Enabled;
         _startup.Enabled = idle;
         _startupItem.Enabled = idle;

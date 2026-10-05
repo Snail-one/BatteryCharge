@@ -104,7 +104,8 @@ internal sealed partial class MainForm
         _viewport.SizeChanged += (_, _) => UpdateResponsiveLayout();
         _powerTimer.Tick += (_, _) => { if (Visible) RenderPower(); };
         _powerTimer.Start();
-        _apply.Name = "ApplyModeButton"; _night.Name = "NightToggle"; _startup.Name = "StartupToggle";
+        _apply.Name = "ApplyModeButton"; _night.Name = "NightChargeButton"; _startup.Name = "StartupToggle";
+        _nightState.Name = "NightChargeState";
         _compactOverview.Name = "CompactOverviewNavigation"; _compactSettings.Name = "CompactSettingsNavigation";
         _detailsButton.Name = "DiagnosticToggleButton";
         _languagePicker.Name = "LanguagePicker"; _details.Name = "DiagnosticDetails"; _refresh.Name = "RefreshButton";
@@ -253,6 +254,7 @@ internal sealed partial class MainForm
         _palette = palette; BackColor = palette.Background; ForeColor = palette.Text;
         ApplyControlPalette(this, palette, false);
         foreach (var label in _secondaryLabels) label.ForeColor = palette.Secondary;
+        _nightState.ForeColor = _snapshot?.NightCharge.IsAvailable == false ? palette.Error : palette.Secondary;
         _startupInfo.ForeColor = _startupHasError ? palette.Error : palette.Secondary;
         _status.ForeColor = _statusTone switch { StatusTone.Success => palette.Success, StatusTone.Error => palette.Error, _ => palette.Secondary };
         _trayMenu.BackColor = palette.Surface; _trayMenu.ForeColor = palette.Text;

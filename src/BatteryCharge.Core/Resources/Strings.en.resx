@@ -150,6 +150,15 @@
   <data xml:space="preserve" name="NightUnavailable">
     <value>Night charging unavailable</value>
   </data>
+  <data xml:space="preserve" name="NightUnavailableReason">
+    <value>Night charging unavailable: {0}</value>
+  </data>
+  <data xml:space="preserve" name="EnableNightCharge">
+    <value>Enable night charging</value>
+  </data>
+  <data xml:space="preserve" name="DisableNightCharge">
+    <value>Disable night charging</value>
+  </data>
   <data xml:space="preserve" name="LastRead">
     <value>Last read: {0:HH:mm:ss}</value>
   </data>

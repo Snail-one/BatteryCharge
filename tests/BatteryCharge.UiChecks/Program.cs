@@ -69,10 +69,10 @@ internal static class Program
         await UntilAsync(() => refresh.Enabled && conservation.IsCurrent);
         Assert(transport.Writes.SequenceEqual(new uint[] { 0x08, 0x03 }), "Applying a card changed the firmware command sequence.");
         Assert(!apply.Enabled, "Apply should be disabled once the selected mode is verified.");
-        var night = Find<CheckBox>(form, "NightToggle");
-        night.AccessibilityObject.DoDefaultAction();
-        await UntilAsync(() => refresh.Enabled && night.Checked);
-        Assert(transport.Writes.Last() == 0x80000012, "The switch did not enable night charging.");
+        var night = Find<Button>(form, "NightChargeButton");
+        night.PerformClick();
+        await UntilAsync(() => refresh.Enabled && night.Text == UiText.Get("DisableNightCharge"));
+        Assert(transport.Writes.Last() == 0x80000012, "The button did not enable night charging.");
         rapid.PerformClick();
         Navigate(form, true);
         var startupToggle = Find<CheckBox>(form, "StartupToggle");
@@ -127,6 +127,60 @@ internal static class Program
         await CheckLayoutsAsync(form, screenshots);
         await CheckSlowReadAsync(form, transport, refresh);
         await CheckRefreshPositionAsync(form, transport);
+        await CheckNightChargeAsync(form, transport, screenshots);
+    }
+
+    private static async Task CheckNightChargeAsync(MainForm form, PreviewTransport transport, string screenshots)
+    {
+        var night = Find<Button>(form, "NightChargeButton");
+        var state = Find<Label>(form, "NightChargeState");
+        var refresh = Find<Button>(form, "RefreshButton");
+        var viewport = Find<Panel>(form, "PageViewport");
+        var previousError = transport.NightError;
+        var scale = form.DeviceDpi / 96f;
+        Navigate(form, false);
+        try
+        {
+            foreach (var width in new[] { 640, 1020 })
+            {
+                form.ClientSize = new Size((int)(width * scale), (int)(620 * scale));
+                transport.NightError = null;
+                refresh.PerformClick();
+                await UntilAsync(() => refresh.Enabled);
+                viewport.ScrollControlIntoView(night);
+                Assert(night.Visible && night.Enabled && night.Width > 0 && night.Height > 0,
+                    "A supported night charging action must be visible and clickable.");
+                Assert(viewport.ClientRectangle.Contains(viewport.RectangleToClient(night.RectangleToScreen(night.ClientRectangle))),
+                    "The night charging action cannot be fully reached by scrolling.");
+                Assert(night.Text == UiText.Get("DisableNightCharge"), "The verified enabled state must offer a disable action.");
+                night.PerformClick();
+                await UntilAsync(() => refresh.Enabled && night.Text == UiText.Get("EnableNightCharge"));
+                Assert(transport.Writes.Last() == 0x12, "The night charging button did not disable the feature.");
+                night.PerformClick();
+                await UntilAsync(() => refresh.Enabled && night.Text == UiText.Get("DisableNightCharge"));
+                Assert(transport.Writes.Last() == 0x80000012, "The night charging button did not re-enable the feature.");
+
+                transport.NightError = new IOException("Simulated night charging unavailable.");
+                refresh.PerformClick();
+                await UntilAsync(() => refresh.Enabled);
+                viewport.ScrollControlIntoView(night);
+                Assert(night.Visible && !night.Enabled && night.Text == UiText.Get("NightUnavailable"),
+                    "An unavailable night charging action must remain visible with an explicit disabled label.");
+                Assert(state.Text.Contains("Simulated night charging unavailable"),
+                    "Night charging read failures must be explained beside the action.");
+                var writes = transport.Writes.Count;
+                night.PerformClick();
+                Assert(transport.Writes.Count == writes, "An unavailable night charging action wrote to firmware.");
+                Capture(form, Path.Combine(screenshots, $"night-unavailable-{width}.png"));
+            }
+        }
+        finally
+        {
+            transport.NightError = previousError;
+            refresh.PerformClick();
+            await UntilAsync(() => refresh.Enabled);
+        }
+        Console.WriteLine("PASS Night charging actions stay reachable, reflect verified state and explain unavailability.");
     }
 
     private static async Task CheckRefreshPositionAsync(MainForm form, PreviewTransport transport)
@@ -501,6 +555,7 @@ internal sealed class PreviewTransport : IEnergyTransport
     private uint _mode;
     private uint _night = 1;
     internal Exception? ModeError { get; set; }
+    internal Exception? NightError { get; set; }
     internal Exception? ReadError { get; set; }
     internal List<uint> Writes { get; } = [];
     internal ManualResetEventSlim? ReadStarted { get; set; }
@@ -517,7 +572,7 @@ internal sealed class PreviewTransport : IEnergyTransport
         return controlCode switch
         {
         ChargeProtocol.ModeControlCode => ModeError is null ? _mode : throw ModeError,
-        ChargeProtocol.NightControlCode => _night,
+        ChargeProtocol.NightControlCode => NightError is null ? _night : throw NightError,
         _ => throw new InvalidOperationException("Unexpected query.")
         };
     }

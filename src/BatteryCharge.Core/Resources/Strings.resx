@@ -150,6 +150,15 @@
   <data xml:space="preserve" name="NightUnavailable">
     <value>夜间充电不可用</value>
   </data>
+  <data xml:space="preserve" name="NightUnavailableReason">
+    <value>夜间充电不可用：{0}</value>
+  </data>
+  <data xml:space="preserve" name="EnableNightCharge">
+    <value>开启夜间充电</value>
+  </data>
+  <data xml:space="preserve" name="DisableNightCharge">
+    <value>关闭夜间充电</value>
+  </data>
   <data xml:space="preserve" name="LastRead">
     <value>最后读取：{0:HH:mm:ss}</value>
   </data>
