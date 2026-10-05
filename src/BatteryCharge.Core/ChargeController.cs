@@ -26,7 +26,7 @@ public sealed class ChargeController
         _verificationInterval = verificationInterval ?? TimeSpan.FromMilliseconds(80);
         if (_verificationInterval < TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(verificationInterval));
-        _operationTimeout = operationTimeout ?? TimeSpan.FromSeconds(15);
+        _operationTimeout = operationTimeout ?? TimeSpan.FromSeconds(5);
         if (_operationTimeout <= TimeSpan.Zero || _operationTimeout.TotalMilliseconds > int.MaxValue)
             throw new ArgumentOutOfRangeException(nameof(operationTimeout));
     }
