@@ -302,6 +302,18 @@ static async Task ConcurrentRequestsAreSerialized()
 static Task StartupTaskConfiguration()
 {
     const string sid = "S-1-5-21-123-456-789-1001";
+    foreach (var name in new[] { "BatteryCharge.exe", "BatteryCharge-Windows-x64-1.0.1.exe",
+        "BatteryCharge-Windows-x64-1.0.1-rc.1.exe", "BatteryCharge-Windows-x64-1.0.1+build.2.EXE" })
+    {
+        var executable = Path.Combine("发布 & tools", name);
+        Assert(StartupTaskDefinition.IsPublishedExecutable(executable), $"Published EXE must support startup: {name}.");
+        var registration = StartupTaskDefinition.Read(StartupTaskDefinition.Create(sid, executable), sid, executable);
+        Assert(registration.Enabled && registration.UsesCurrentPath, "Versioned EXE paths must round-trip in startup registration.");
+    }
+    foreach (var name in new[] { "dotnet.exe", "BatteryCharge.dll", "BatteryCharge-Windows-x64-latest.exe",
+        "Other-Windows-x64-1.0.1.exe" })
+        Assert(!StartupTaskDefinition.IsPublishedExecutable(Path.Combine("app", name)),
+            $"An unrelated host or unsupported filename must not be used for startup: {name}.");
     const string path = @"D:\电池 & tools\BatteryCharge.exe";
     var xml = StartupTaskDefinition.Create(sid, path);
     var task = XElement.Parse(xml);

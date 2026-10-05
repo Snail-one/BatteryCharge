@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using System.Text.RegularExpressions;
 using BatteryCharge.Core;
 
 namespace BatteryCharge.App;
@@ -9,6 +10,15 @@ internal static class StartupTaskDefinition
 {
     internal const string Owner = "BatteryCharge.Standalone.Startup";
     private static readonly XNamespace Ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
+
+    internal static bool IsPublishedExecutable(string executablePath)
+    {
+        var name = Path.GetFileName(executablePath);
+        return string.Equals(name, "BatteryCharge.exe", StringComparison.OrdinalIgnoreCase)
+            || Regex.IsMatch(name,
+                @"\ABatteryCharge-Windows-x64-\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?\.exe\z",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    }
 
     internal static string Create(string userSid, string executablePath)
     {
