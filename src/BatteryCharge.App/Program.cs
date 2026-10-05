@@ -11,13 +11,16 @@ internal static class Program
         UiText.SetLanguage(LanguagePreferences.Load(LanguagePreferences.SettingsPath, CultureInfo.CurrentUICulture));
         ApplicationConfiguration.Initialize();
 
+        // Create the signal before taking the mutex so a launch during initialization
+        // remains pending until the first instance starts listening.
+        using var showWindow = new EventWaitHandle(false, EventResetMode.AutoReset,
+            @"Local\BatteryCharge.Standalone.ShowWindow");
         // Prevent two instances from interleaving firmware command sequences.
         using var instance = new Mutex(true, @"Global\BatteryCharge.Standalone", out var firstInstance);
         if (!firstInstance)
         {
             if (!args.Contains("--startup", StringComparer.OrdinalIgnoreCase))
-                MessageBox.Show(UiText.Get("AlreadyRunning"),
-                    UiText.Get("AppName"), MessageBoxButtons.OK, MessageBoxIcon.Information);
+                showWindow.Set();
             return;
         }
 
@@ -27,7 +30,18 @@ internal static class Program
             var controller = new ChargeController(device);
             using var window = new MainForm(controller,
                 startInTray: args.Contains("--startup", StringComparer.OrdinalIgnoreCase));
-            Application.Run(window);
+            // A tray-only launch also needs a handle for UI-thread dispatch.
+            _ = window.Handle;
+            var listener = ThreadPool.RegisterWaitForSingleObject(showWindow,
+                (_, _) => window.RequestShowWindow(), null, Timeout.Infinite, executeOnlyOnce: false);
+            try
+            {
+                Application.Run(window);
+            }
+            finally
+            {
+                listener.Unregister(null);
+            }
         }
         finally
         {

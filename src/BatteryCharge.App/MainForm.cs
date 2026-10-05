@@ -5,6 +5,7 @@ namespace BatteryCharge.App;
 internal sealed class MainForm : Form
 {
     private readonly ChargeController _controller;
+    private TableLayoutPanel _layout = null!;
     private readonly List<(Control Control, string Key)> _localizedControls = [];
     private readonly List<(ToolStripItem Item, string Key)> _localizedMenus = [];
     private readonly ComboBox _languagePicker = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 115 };
@@ -54,15 +55,16 @@ internal sealed class MainForm : Form
 
     public MainForm(ChargeController controller, bool startInTray = false)
     {
+        SuspendLayout();
         _controller = controller;
         _startInTray = startInTray;
         Text = T("AppName");
         Icon = _icons.WindowFor(null);
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(590, 780);
-        MinimumSize = new Size(570, 780);
-        BackColor = Color.FromArgb(247, 249, 252);
+        AutoScaleDimensions = new SizeF(96, 96);
         AutoScaleMode = AutoScaleMode.Dpi;
+        ClientSize = new Size(590, 780);
+        BackColor = Color.FromArgb(247, 249, 252);
 
         BuildWindow();
         BuildTrayMenu();
@@ -97,6 +99,7 @@ internal sealed class MainForm : Form
                 Hide();
         };
         UpdateEnabledState();
+        ResumeLayout(performLayout: true);
     }
 
     protected override void SetVisibleCore(bool value)
@@ -119,11 +122,13 @@ internal sealed class MainForm : Form
             return;
         _initialized = true;
         await RefreshAsync();
+        if (!IsDisposed)
+            FitWindowToScreen(fitContent: true);
     }
 
     private void BuildWindow()
     {
-        var layout = new TableLayoutPanel
+        var layout = _layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             AutoScroll = true,
@@ -152,61 +157,24 @@ internal sealed class MainForm : Form
         layout.Controls.Add(header, 0, 0);
         layout.Controls.Add(Hint("Intro"), 0, 1);
 
-        var modePanel = new FlowLayoutPanel
-        {
-            AutoSize = true,
-            Dock = DockStyle.Top,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            Padding = new Padding(12)
-        };
         foreach (var mode in Enum.GetValues<ChargeMode>())
             _modePicker.Items.Add(new ModeChoice(mode));
         _modePicker.SelectedIndex = 0;
-        modePanel.Controls.Add(_modeState);
-        var selectRow = new FlowLayoutPanel { AutoSize = true, WrapContents = true };
+        var selectRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = true };
         selectRow.Controls.Add(_modePicker);
         selectRow.Controls.Add(Localized(_apply, "ApplyMode"));
-        modePanel.Controls.Add(selectRow);
-        modePanel.Controls.Add(Hint("ConservationHint"));
+        var modePanel = VerticalPanel(12, _modeState, selectRow, Hint("ConservationHint"));
         layout.Controls.Add(Localized(Card("", modePanel), "ChargeMode"), 0, 2);
 
-        var nightPanel = new FlowLayoutPanel
-        {
-            AutoSize = true,
-            Dock = DockStyle.Top,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            Padding = new Padding(12)
-        };
-        nightPanel.Controls.Add(_nightState);
-        nightPanel.Controls.Add(Localized(_night, "NightToggle"));
-        nightPanel.Controls.Add(Hint("NightHint"));
+        var nightPanel = VerticalPanel(12, _nightState,
+            Localized(_night, "NightToggle"), Hint("NightHint"));
         layout.Controls.Add(Localized(Card("", nightPanel), "NightCharge"), 0, 3);
 
-        var startupPanel = new FlowLayoutPanel
-        {
-            AutoSize = true,
-            Dock = DockStyle.Top,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false,
-            Padding = new Padding(12)
-        };
-        _startupInfo.MaximumSize = new Size(470, 0);
-        startupPanel.Controls.Add(Localized(_startup, "StartupToggle"));
-        startupPanel.Controls.Add(_startupInfo);
-        startupPanel.Controls.Add(Localized(_cleanup, "Cleanup"));
+        var startupPanel = VerticalPanel(12, Localized(_startup, "StartupToggle"),
+            _startupInfo, Localized(_cleanup, "Cleanup"));
         layout.Controls.Add(Localized(Card("", startupPanel), "StartupSettings"), 0, 4);
 
-        var summary = new FlowLayoutPanel
-        {
-            AutoSize = true,
-            Dock = DockStyle.Top,
-            FlowDirection = FlowDirection.TopDown,
-            WrapContents = false
-        };
-        summary.Controls.Add(_powerState);
-        summary.Controls.Add(_lastRead);
+        var summary = VerticalPanel(0, _powerState, _lastRead);
         layout.Controls.Add(summary, 0, 5);
 
         var actions = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = true };
@@ -219,9 +187,9 @@ internal sealed class MainForm : Form
         actions.Controls.Add(quit);
         layout.Controls.Add(actions, 0, 6);
 
-        _status.MaximumSize = new Size(500, 0);
         _status.Margin = new Padding(0, 8, 0, 8);
         layout.Controls.Add(_status, 0, 7);
+        _details.MinimumSize = new Size(0, 100);
         layout.Controls.Add(_details, 0, 8);
         Controls.Add(layout);
     }
@@ -355,6 +323,8 @@ internal sealed class MainForm : Form
         {
             ResumeLayout(performLayout: true);
         }
+        if (IsHandleCreated)
+            FitWindowToScreen(fitContent: true);
     }
 
     private TControl Localized<TControl>(TControl control, string key) where TControl : Control
@@ -371,12 +341,7 @@ internal sealed class MainForm : Form
         return item;
     }
 
-    private Label Hint(string key)
-    {
-        var label = Localized(TextLabel(""), key);
-        label.MaximumSize = new Size(440, 0);
-        return label;
-    }
+    private Label Hint(string key) => Localized(TextLabel(""), key);
 
     private Task RefreshAsync() => PerformAsync(async () =>
     {
@@ -635,11 +600,69 @@ internal sealed class MainForm : Form
         _cleanupItem.Enabled = idle;
     }
 
+    internal void RequestShowWindow()
+    {
+        if (IsDisposed || Disposing || !IsHandleCreated)
+            return;
+        try
+        {
+            BeginInvoke(new Action(() =>
+            {
+                if (!IsDisposed && !_quitting)
+                    ShowWindow();
+            }));
+        }
+        catch (InvalidOperationException)
+        {
+            // The window can close between the handle check and dispatch.
+        }
+    }
+
     private void ShowWindow()
     {
+        _startInTray = false;
         Show();
-        WindowState = FormWindowState.Normal;
+        if (WindowState == FormWindowState.Minimized)
+            WindowState = FormWindowState.Normal;
+        FitWindowToScreen();
         Activate();
+    }
+
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+        FitWindowToScreen(fitContent: true);
+    }
+
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        // Windows applies the suggested bounds after this notification returns.
+        BeginInvoke(new Action(() =>
+        {
+            if (!IsDisposed)
+                FitWindowToScreen();
+        }));
+    }
+
+    private void FitWindowToScreen(bool fitContent = false)
+    {
+        if (WindowState != FormWindowState.Normal)
+            return;
+
+        var workingArea = Screen.FromControl(this).WorkingArea;
+        var scale = DeviceDpi / 96f;
+        MinimumSize = new Size(Math.Min((int)Math.Ceiling(420 * scale), workingArea.Width),
+            Math.Min((int)Math.Ceiling(360 * scale), workingArea.Height));
+        var bounds = Bounds;
+        if (fitContent)
+        {
+            _layout.PerformLayout();
+            var contentHeight = _layout.Padding.Vertical + _layout.GetRowHeights().Take(8).Sum()
+                + _details.MinimumSize.Height + _details.Margin.Vertical;
+            bounds.Height = Math.Max(bounds.Height, contentHeight + Height - ClientSize.Height);
+        }
+        Bounds = WindowBounds.Fit(bounds, workingArea);
     }
 
     private void Quit()
@@ -683,9 +706,30 @@ internal sealed class MainForm : Form
     {
         Text = text,
         AutoSize = true,
+        Dock = DockStyle.Top,
         ForeColor = Color.FromArgb(69, 85, 105),
         Margin = new Padding(0, 3, 0, 7)
     };
+
+    private static TableLayoutPanel VerticalPanel(int padding, params Control[] controls)
+    {
+        var panel = new TableLayoutPanel
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Dock = DockStyle.Top,
+            ColumnCount = 1,
+            RowCount = controls.Length,
+            Padding = new Padding(padding)
+        };
+        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        for (var row = 0; row < controls.Length; row++)
+        {
+            panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            panel.Controls.Add(controls[row], 0, row);
+        }
+        return panel;
+    }
 
     private static GroupBox Card(string title, Control content)
     {

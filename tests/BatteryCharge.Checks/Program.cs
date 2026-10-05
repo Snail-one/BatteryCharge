@@ -2,6 +2,7 @@ using BatteryCharge.Core;
 using BatteryCharge.App;
 using System.Xml.Linq;
 using System.Globalization;
+using System.Drawing;
 
 // Dependency-free behavioral checks: no device access, test SDK, or test packages.
 var checks = new (string Name, Func<Task> Run)[]
@@ -28,7 +29,8 @@ var checks = new (string Name, Func<Task> Run)[]
     ("UI and driver errors switch languages independently of thread culture", LanguageResources),
     ("Cleanup removes only app settings and recognized temporary files", CleanupPreservesOtherFiles),
     ("Startup removal failure preserves configuration for retry", CleanupTaskFailure),
-    ("Configuration deletion failure is reported and preserves remaining files", CleanupFileFailure)
+    ("Configuration deletion failure is reported and preserves remaining files", CleanupFileFailure),
+    ("Window bounds fit small screens, scaled displays and disconnected monitors", AdaptiveWindowBounds)
 };
 
 var failures = 0;
@@ -50,6 +52,30 @@ return failures == 0 ? 0 : 1;
 
 static ChargeController Controller(FakeTransport transport, int attempts = 3) =>
     new(transport, attempts, TimeSpan.Zero);
+
+static Task AdaptiveWindowBounds()
+{
+    var cases = new[]
+    {
+        // Preserve a manually resized window that already fits.
+        (new Rectangle(100, 80, 620, 500), new Rectangle(0, 0, 1920, 1040), new Rectangle(100, 80, 620, 500)),
+        // A 768-pixel screen has less space once the taskbar is excluded.
+        (new Rectangle(388, 0, 590, 819), new Rectangle(0, 0, 1366, 728), new Rectangle(388, 0, 590, 728)),
+        // A high-DPI window must still fit on a narrow display.
+        (new Rectangle(50, 100, 1180, 1638), new Rectangle(0, 0, 1024, 728), new Rectangle(0, 0, 1024, 728)),
+        // The taskbar and additional monitors need not start at (0, 0).
+        (new Rectangle(-1800, -100, 590, 900), new Rectangle(-1920, 40, 1920, 1000), new Rectangle(-1800, 40, 590, 900)),
+        // Restore a window whose previous monitor was disconnected.
+        (new Rectangle(2400, 1200, 590, 780), new Rectangle(40, 0, 1880, 1080), new Rectangle(1330, 300, 590, 780))
+    };
+    foreach (var (bounds, workingArea, expected) in cases)
+    {
+        var actual = WindowBounds.Fit(bounds, workingArea);
+        Assert(actual == expected, $"Incorrect fitted window: {actual}; expected {expected}.");
+        Assert(workingArea.Contains(actual), "A fitted window extends outside the monitor's working area.");
+    }
+    return Task.CompletedTask;
+}
 
 static void Assert(bool condition, string message)
 {
