@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/BatteryCharge.Core/BatteryCharge.Core.csproj" />
+    <Project Path="src/BatteryCharge.App/BatteryCharge.App.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/BatteryCharge.Checks/BatteryCharge.Checks.csproj" />
+  </Folder>
+</Solution>

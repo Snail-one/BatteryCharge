@@ -1,0 +1,49 @@
+name: Build Windows application
+
+on:
+  workflow_dispatch:
+  push:
+    paths-ignore:
+      - '**/*.md'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+
+permissions:
+  contents: read
+
+jobs:
+  check-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Check isolated core behavior on Linux
+        run: dotnet run --project tests/BatteryCharge.Checks/BatteryCharge.Checks.csproj -c Release
+
+  build-windows:
+    needs: check-core
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        self-contained: [false, true]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Check core behavior on Windows
+        run: dotnet run --project tests/BatteryCharge.Checks/BatteryCharge.Checks.csproj -c Release
+      - name: Publish Windows x64 application
+        run: >-
+          dotnet publish src/BatteryCharge.App/BatteryCharge.App.csproj
+          -c Release -r win-x64 --self-contained ${{ matrix.self-contained }}
+          -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:PublishTrimmed=false -p:DebugType=embedded -o artifacts/app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BatteryCharge-win-x64-self-contained-${{ matrix.self-contained }}
+          path: artifacts/app/
+          if-no-files-found: error
