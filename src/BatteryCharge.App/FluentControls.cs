@@ -334,10 +334,11 @@ internal sealed class ModeCard : RadioButton, IFluentControl
 internal sealed class GlyphView : Control, IFluentControl
 {
     private FluentPalette _palette = FluentPalette.Light;
+    private FluentGlyph _glyph;
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public FluentPalette Palette { get => _palette; set { if (_palette == value) return; _palette = value; Invalidate(); } }
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    internal FluentGlyph Glyph { get; set; }
+    internal FluentGlyph Glyph { get => _glyph; set { if (_glyph == value) return; _glyph = value; Invalidate(); } }
     internal GlyphView(FluentGlyph glyph, int size = 24)
     {
         Glyph = glyph;
@@ -347,6 +348,9 @@ internal sealed class GlyphView : Control, IFluentControl
         BackColor = Color.Transparent;
         TabStop = false;
     }
+    // The default opaque background uses GDI; use the same transformed and
+    // clipped GDI+ drawing as the glyph so old pixels are fully cleared.
+    protected override void OnPaintBackground(PaintEventArgs e) => FluentDrawing.Background(this, e.Graphics);
     protected override void OnPaint(PaintEventArgs e) =>
         FluentDrawing.Glyph(e.Graphics, Glyph, new RectangleF(1, 1, Width - 2, Height - 2), Palette.Accent);
 }
@@ -368,6 +372,7 @@ internal sealed class BatteryMeter : Control, IFluentControl
         SetStyle(ControlStyles.ResizeRedraw | ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
         BackColor = Color.Transparent;
     }
+    protected override void OnPaintBackground(PaintEventArgs e) => FluentDrawing.Background(this, e.Graphics);
     protected override void OnPaint(PaintEventArgs e)
     {
         var scale = DeviceDpi / 96f;

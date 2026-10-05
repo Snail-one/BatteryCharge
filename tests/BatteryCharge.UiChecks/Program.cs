@@ -381,7 +381,14 @@ internal static class Program
                     card.Description = "New / 新说明";
                     card.Checked = card.IsCurrent = false;
                 }
-                else if (control == glyph) glyph.Glyph = FluentGlyph.Language;
+                else if (control == glyph)
+                {
+                    glyph.Glyph = FluentGlyph.Startup;
+                    PaintFrame(control, reused, control.ClientRectangle);
+                    glyph.Glyph = FluentGlyph.Tray;
+                    PaintFrame(control, reused, control.ClientRectangle);
+                    glyph.Glyph = FluentGlyph.Language;
+                }
                 else meter.Level = .3f;
                 control.Enabled = false;
                 PaintFrame(control, reused, control.ClientRectangle);
@@ -449,7 +456,12 @@ internal static class Program
     {
         for (var y = 0; y < actual.Height; y++)
         for (var x = 0; x < actual.Width; x++)
-            Assert(actual.GetPixel(x, y).ToArgb() == expected.GetPixel(x, y).ToArgb(), message);
+        {
+            var actualColor = actual.GetPixel(x, y).ToArgb();
+            var expectedColor = expected.GetPixel(x, y).ToArgb();
+            if (actualColor != expectedColor)
+                throw new InvalidOperationException($"{message} First differing pixel ({x}, {y}): actual #{actualColor:X8}, expected #{expectedColor:X8}.");
+        }
     }
 
     private static async Task UntilAsync(Func<bool> predicate)
