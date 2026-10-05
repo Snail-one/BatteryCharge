@@ -12,8 +12,8 @@ jobs:
   check-core:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
       - name: Check isolated core behavior on Linux
@@ -26,15 +26,15 @@ jobs:
       matrix:
         self-contained: [false, true]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
       - name: Check core behavior on Windows
         run: dotnet run --project tests/BatteryCharge.Checks/BatteryCharge.Checks.csproj -c Release
       - name: Check Windows UI with simulated device and startup registration
         run: dotnet run --project tests/BatteryCharge.UiChecks/BatteryCharge.UiChecks.csproj -c Release -- artifacts/ui
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: BatteryCharge-ui-self-contained-${{ matrix.self-contained }}
@@ -46,7 +46,7 @@ jobs:
           -c Release -r win-x64 --self-contained ${{ matrix.self-contained }}
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
           -p:PublishTrimmed=false -p:DebugType=embedded -o artifacts/app
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: BatteryCharge-win-x64-self-contained-${{ matrix.self-contained }}
           path: artifacts/app/
