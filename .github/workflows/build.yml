@@ -57,16 +57,16 @@ jobs:
           -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
           -p:Version="$env:RELEASE_VERSION"
           -p:PublishTrimmed=false -p:DebugType=embedded -o artifacts/app
-      - name: Name Windows executable
+      - name: Package Windows application
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
         shell: pwsh
         run: |
-          Rename-Item -Path artifacts/app/BatteryCharge.exe -NewName "BatteryCharge-Windows-x64-$env:RELEASE_VERSION.exe"
+          Compress-Archive -Path artifacts/app/* -DestinationPath "artifacts/BatteryCharge-Windows-x64-$env:RELEASE_VERSION.zip"
       - uses: actions/upload-artifact@v7
         with:
           name: BatteryCharge-Windows-x64-${{ steps.release.outputs.version }}
-          path: artifacts/app/BatteryCharge-Windows-x64-${{ steps.release.outputs.version }}.exe
+          path: artifacts/BatteryCharge-Windows-x64-${{ steps.release.outputs.version }}.zip
           if-no-files-found: error
       - name: Publish GitHub Release with generated notes
         env:
@@ -74,7 +74,7 @@ jobs:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
         shell: pwsh
         run: |
-          $package = "artifacts/app/BatteryCharge-Windows-x64-$env:RELEASE_VERSION.exe"
+          $package = "artifacts/BatteryCharge-Windows-x64-$env:RELEASE_VERSION.zip"
           $existingRelease = gh release view "$env:GITHUB_REF_NAME" --repo "$env:GITHUB_REPOSITORY" --json tagName 2>$null
           if ($LASTEXITCODE -eq 0) {
             gh release upload "$env:GITHUB_REF_NAME" "$package" --repo "$env:GITHUB_REPOSITORY" --clobber

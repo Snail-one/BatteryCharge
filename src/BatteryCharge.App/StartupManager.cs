@@ -37,7 +37,7 @@ internal sealed class StartupManager : IStartupManager
     public void SetEnabled(bool enabled)
     {
         // A framework-dependent DLL launched via dotnet.exe is not a stable startup target.
-        if (enabled && !StartupTaskDefinition.IsPublishedExecutable(_executablePath))
+        if (enabled && !string.Equals(Path.GetFileName(_executablePath), "BatteryCharge.exe", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException(UiText.Get("UsePublishedExecutable"));
 
         WithFolder(folder =>

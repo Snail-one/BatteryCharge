@@ -211,7 +211,7 @@
     <value>无法确定程序路径。</value>
   </data>
   <data xml:space="preserve" name="UsePublishedExecutable">
-    <value>请使用发布的应用 EXE 开启自动启动。</value>
+    <value>请使用发布目录中的 BatteryCharge.exe 开启自动启动。</value>
   </data>
   <data xml:space="preserve" name="SchedulerUnavailable">
     <value>无法连接 Windows 任务计划程序。</value>

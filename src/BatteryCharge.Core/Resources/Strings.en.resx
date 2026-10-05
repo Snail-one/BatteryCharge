@@ -211,7 +211,7 @@
     <value>Could not determine the application path.</value>
   </data>
   <data xml:space="preserve" name="UsePublishedExecutable">
-    <value>Use the published application EXE to enable automatic startup.</value>
+    <value>Use BatteryCharge.exe from the publish folder to enable automatic startup.</value>
   </data>
   <data xml:space="preserve" name="SchedulerUnavailable">
     <value>Could not connect to Windows Task Scheduler.</value>

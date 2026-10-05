@@ -41,7 +41,7 @@
 
 应用需要管理员权限，因此通过 Windows 任务计划程序为当前运行账户创建 `BatteryCharge.Startup.<用户 SID>` 任务，使用最高权限和已登录用户的交互会话，不保存密码，不直接写注册表 Run 项。任务在该账户登录约 10 秒后执行 `BatteryCharge.exe --startup`，直接显示托盘图标。电池供电时也会启动，拔掉电源不会结束任务，任务没有运行时长限制。启用后不会立即再启动一个实例。
 
-请使用发布的应用 EXE 开启自动启动，支持本地发布的 `BatteryCharge.exe` 和从 GitHub Release 下载的 `BatteryCharge-Windows-x64-版本.exe`。移动程序后，窗口会提示旧路径；关闭后重新开启即可更新路径。正常双击 EXE 仍会打开窗口。自动启动只读取设备状态，不会重新应用充电模式。
+请使用发布目录中的 `BatteryCharge.exe` 开启自动启动。移动发布目录后，窗口会提示旧路径；关闭后重新开启即可更新路径。正常双击 EXE 仍会打开窗口。自动启动只读取设备状态，不会重新应用充电模式。
 
 程序已经运行时，再次双击 EXE 会打开已有实例的窗口，不再弹出“已在运行”提示，也不会启动第二个实例。重复执行 `--startup` 则保持静默，不弹出窗口。
 
@@ -154,7 +154,7 @@ dotnet run --project tests/BatteryCharge.Checks/BatteryCharge.Checks.csproj -c R
 
 Windows 界面检查使用模拟设备与模拟启动注册，运行实际窗口并生成中英文、明暗主题、窄窗口和错误状态的截图，执行命令与检查范围见 [桌面 UI 设计](docs/desktop-ui.md)。
 
-根目录的 `.github/workflows/build.yml` 仅在推送 tag 时运行；普通分支推送、PR 和手动操作不触发构建。工作流执行 Linux 和 Windows 行为检查、Windows 界面检查，并上传界面截图（`BatteryCharge-ui`）和一个 Windows x64 单文件 EXE。EXE 按“名字-Windows-架构-版本”命名，例如 tag `v1.0.1` 对应 `BatteryCharge-Windows-x64-1.0.1.exe`；程序内的版本号也采用 tag 版本。标签支持 `v1.0.1`、`1.0.1` 和 `v1.0.1-rc.1` 等版本格式，前导 `v` 不计入版本号。CI 只生成不包含 .NET 运行时的版本，运行电脑需安装 .NET 10 桌面运行时。构建和检查全部通过后，工作流自动创建对应 tag 的 GitHub Release 并直接附上 EXE 文件，下载后无需解压；预发布版本标记为 Pre-release，重复运行时更新同名附件并保留现有说明。例如：
+根目录的 `.github/workflows/build.yml` 仅在推送 tag 时运行；普通分支推送、PR 和手动操作不触发构建。工作流执行 Linux 和 Windows 行为检查、Windows 界面检查，并上传界面截图（`BatteryCharge-ui`）和一个 Windows x64 发布包。发布包按“名字-Windows-架构-版本”命名，例如 tag `v1.0.1` 对应 `BatteryCharge-Windows-x64-1.0.1.zip`；程序内的版本号也采用 tag 版本。标签支持 `v1.0.1`、`1.0.1` 和 `v1.0.1-rc.1` 等版本格式，前导 `v` 不计入版本号。CI 只生成不包含 .NET 运行时的版本，运行电脑需安装 .NET 10 桌面运行时。构建和检查全部通过后，工作流自动创建对应 tag 的 GitHub Release 并附上 ZIP 文件；预发布版本标记为 Pre-release，重复运行时更新同名附件并保留现有说明。例如：
 
 ```bash
 git tag v1.0.1
