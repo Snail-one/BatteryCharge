@@ -228,15 +228,36 @@ static async Task WindowsDirectoryLease()
     Directory.CreateDirectory(leaf);
     try
     {
+        var initialWriteError = WindowsDirectoryProbe.TryWrite(leaf);
+        Assert(initialWriteError == 0, $"Directory write probe must succeed before locking; Win32 error {initialWriteError}.");
         using (SafeDirectory.Acquire(leaf))
         {
             await Throws<IOException>(() => { Directory.Move(parent, parent + "-moved"); return Task.CompletedTask; });
-            Assert(WindowsDirectoryProbe.TryWrite(leaf) == 32,
-                "A checked directory must deny write handles that could modify its reparse data.");
+            foreach (var path in new[] { parent, leaf })
+            {
+                var writeError = WindowsDirectoryProbe.TryWrite(path);
+                Assert(writeError == 32,
+                    $"A checked directory must deny write handles; expected Win32 error 32, got {writeError} for '{path}'.");
+            }
             // Child operations must remain possible while its ancestors are pinned.
-            LanguagePreferences.Save(Path.Combine(leaf, "settings.json"), "en-US");
+            var settings = Path.Combine(leaf, "settings.json");
+            LanguagePreferences.Save(settings, "en-US");
+            Assert(LanguagePreferences.Load(settings, CultureInfo.GetCultureInfo("zh-CN")) == "en-US",
+                "Reading settings must remain possible while directories are pinned.");
+            var initialFileWriteError = WindowsDirectoryProbe.TryWrite(settings, isDirectory: false);
+            Assert(initialFileWriteError == 0, $"File write probe must succeed before locking; Win32 error {initialFileWriteError}.");
+            using (SafeDirectory.OpenRegularFile(settings))
+            {
+                var fileWriteError = WindowsDirectoryProbe.TryWrite(settings, isDirectory: false);
+                Assert(fileWriteError == 32,
+                    $"A pinned executable/configuration file must deny write handles; expected Win32 error 32, got {fileWriteError}.");
+                await Throws<IOException>(() => { File.Move(settings, settings + ".moved"); return Task.CompletedTask; });
+            }
+            var releasedFileWriteError = WindowsDirectoryProbe.TryWrite(settings, isDirectory: false);
+            Assert(releasedFileWriteError == 0, $"File sharing was not restored after disposal; Win32 error {releasedFileWriteError}.");
         }
-        Assert(WindowsDirectoryProbe.TryWrite(leaf) == 0, "Directory write sharing was not restored after disposal.");
+        var releasedWriteError = WindowsDirectoryProbe.TryWrite(leaf);
+        Assert(releasedWriteError == 0, $"Directory write sharing was not restored after disposal; Win32 error {releasedWriteError}.");
         Directory.Move(parent, parent + "-moved");
         Assert(Directory.Exists(parent + "-moved"), "Directory handles leaked after the lease ended.");
     }
@@ -254,6 +275,13 @@ static Task WindowsStartupAcl()
         result.SetSecurityDescriptorSddlForm(sddl);
         return result;
     }
+    static DirectorySecurity WithUserRights(FileSystemRights rights)
+    {
+        var result = Security("O:BAG:BAD:P(A;;FA;;;BA)");
+        result.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null),
+            rights, AccessControlType.Allow));
+        return result;
+    }
     var protectedAcl = Security("O:BAG:BAD:P(A;;FA;;;BA)(A;;FR;;;BU)");
     Assert(StartupPathSecurity.IsProtected(protectedAcl, false), "An administrator-owned read-only target was rejected.");
     Assert(!StartupPathSecurity.IsProtected(Security("O:BAG:BAD:P(A;;FA;;;BA)(A;;FW;;;BU)"), false), "User write permission was accepted.");
@@ -261,8 +289,8 @@ static Task WindowsStartupAcl()
     Assert(!StartupPathSecurity.IsProtected(Security("O:BAG:BAD:P(A;;GA;;;BU)"), true), "An unmapped generic all ACE was accepted on an ancestor.");
     Assert(!StartupPathSecurity.IsProtected(Security("O:BUG:BAD:P(A;;FR;;;BU)"), false), "An untrusted owner was accepted.");
     Assert(!StartupPathSecurity.IsProtected(Security("O:BAG:BAD:NO_ACCESS_CONTROL"), false), "An unrestricted DACL was accepted.");
-    Assert(!StartupPathSecurity.IsProtected(Security("O:BAG:BAD:P(A;;DC;;;BU)"), true), "An ancestor allowing deletion of children was accepted.");
-    Assert(StartupPathSecurity.IsProtected(Security("O:BAG:BAD:P(A;;AD;;;BU)"), true), "Creating unrelated sibling directories must not reject a protected child.");
+    Assert(!StartupPathSecurity.IsProtected(WithUserRights(FileSystemRights.DeleteSubdirectoriesAndFiles), true), "An ancestor allowing deletion of children was accepted.");
+    Assert(StartupPathSecurity.IsProtected(WithUserRights(FileSystemRights.CreateDirectories), true), "Creating unrelated sibling directories must not reject a protected child.");
     return Task.CompletedTask;
 }
 
@@ -913,9 +941,10 @@ static async Task CleanupFileFailure()
 [SupportedOSPlatform("windows")]
 static class WindowsDirectoryProbe
 {
-    internal static int TryWrite(string directory)
+    internal static int TryWrite(string path, bool isDirectory = true)
     {
-        using var handle = CreateFileW(directory, 0x40000000, 3, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
+        var flags = 0x00200000u | (isDirectory ? 0x02000000u : 0u);
+        using var handle = CreateFileW(path, 0x40000000, 3, IntPtr.Zero, 3, flags, IntPtr.Zero);
         return handle.IsInvalid ? Marshal.GetLastWin32Error() : 0;
     }
 

@@ -35,7 +35,9 @@ internal sealed class SafeDirectory : IDisposable
                     Directory.CreateDirectory(directory); // Parent components are already pinned.
                 if (OperatingSystem.IsWindows())
                 {
-                    var handle = Native.CreateFileW(directory, 0x80, 1, IntPtr.Zero, 3,
+                    // Attribute-only handles do not participate in normal read/write
+                    // sharing checks. Include FILE_LIST_DIRECTORY to enforce the lease.
+                    var handle = Native.CreateFileW(directory, 0x81, 1, IntPtr.Zero, 3,
                         0x02000000 | 0x00200000, IntPtr.Zero); // BACKUP_SEMANTICS | OPEN_REPARSE_POINT
                     if (handle.IsInvalid)
                     {
@@ -67,7 +69,8 @@ internal sealed class SafeDirectory : IDisposable
 
     internal static SafeFileHandle OpenRegularFile(string path, bool readData = false)
     {
-        var access = readData ? 0x80020080u : 0x20080u;
+        // FILE_READ_DATA also makes the default validation handle enforce sharing.
+        var access = readData ? 0x80020080u : 0x20081u;
         var handle = Native.CreateFileW(path, access, 1, IntPtr.Zero, 3, 0x00200000, IntPtr.Zero);
         if (!handle.IsInvalid && Native.GetFileInformationByHandleEx(handle, 9, out var info, 8)
             && (info.Attributes & (uint)(FileAttributes.Directory | FileAttributes.ReparsePoint)) == 0)
