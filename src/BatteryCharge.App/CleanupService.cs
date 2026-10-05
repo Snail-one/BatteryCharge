@@ -4,7 +4,7 @@ namespace BatteryCharge.App;
 
 internal static class CleanupService
 {
-    internal static void Run(Action removeStartupTask, string settingsPath, string legacySettingsPath)
+    internal static void Run(Action removeStartupTask, string settingsPath)
     {
         try
         {
@@ -16,12 +16,10 @@ internal static class CleanupService
             throw new IOException(UiText.Get("CleanupStartupFailed", error.Message), error);
         }
 
-        DeleteSettings(settingsPath, removeEmptyDirectory: false);
-        if (!string.Equals(Path.GetFullPath(settingsPath), Path.GetFullPath(legacySettingsPath), StringComparison.OrdinalIgnoreCase))
-            DeleteSettings(legacySettingsPath, removeEmptyDirectory: true);
+        DeleteSettings(settingsPath);
     }
 
-    private static void DeleteSettings(string settingsPath, bool removeEmptyDirectory)
+    private static void DeleteSettings(string settingsPath)
     {
         var directory = Path.GetDirectoryName(Path.GetFullPath(settingsPath))!;
         try
@@ -37,9 +35,6 @@ internal static class CleanupService
                 if (Guid.TryParseExact(token, "N", out _))
                     File.Delete(temporary);
             }
-            // Never delete the executable folder or recursively remove unrelated files.
-            if (removeEmptyDirectory)
-                lease.RemoveIfEmpty();
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {

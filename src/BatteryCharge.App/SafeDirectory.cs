@@ -65,21 +65,6 @@ internal sealed class SafeDirectory : IDisposable
         }
     }
 
-    internal void RemoveIfEmpty()
-    {
-        var directory = Paths[^1];
-        if (Paths.Count <= 1 || Directory.EnumerateFileSystemEntries(directory).Any())
-            return;
-        // Only release the leaf; its parent remains pinned. RemoveDirectory is nonrecursive
-        // and removes a replacement junction itself, never its target's contents.
-        if (_handles.Count > 0)
-        {
-            _handles[^1].Dispose();
-            _handles.RemoveAt(_handles.Count - 1);
-        }
-        Directory.Delete(directory, recursive: false);
-    }
-
     internal static SafeFileHandle OpenRegularFile(string path, bool readData = false)
     {
         var access = readData ? 0x80020080u : 0x20080u;

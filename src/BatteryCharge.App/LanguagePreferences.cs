@@ -9,10 +9,6 @@ internal static class LanguagePreferences
     internal const int MaximumSettingsBytes = 64 * 1024;
     internal static string SettingsPath => Path.Combine(AppContext.BaseDirectory, "settings.json");
 
-    internal static string LegacySettingsPath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "BatteryCharge", "settings.json");
-
     internal static string Load(string path, CultureInfo systemCulture) =>
         ReadLanguage(path) ?? UiText.DefaultLanguage(systemCulture);
 

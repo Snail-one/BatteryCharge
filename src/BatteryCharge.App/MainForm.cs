@@ -384,7 +384,7 @@ internal sealed partial class MainForm : Form
 
             SetStatus(T("CleanupWorking"));
             await Task.Run(() => CleanupService.Run(_startupManager.RemoveForCleanup,
-                _preferencesPath, LanguagePreferences.LegacySettingsPath));
+                _preferencesPath));
             MessageBox.Show(this, T("CleanupComplete"), T("AppName"),
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             _quitting = true;

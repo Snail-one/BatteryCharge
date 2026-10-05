@@ -206,7 +206,7 @@ static async Task DirectoryLinkProtection()
         Assert(!Directory.Exists(Path.Combine(outside, "new")), "Saving created a directory through a linked ancestor.");
         await Throws<IOException>(() =>
         {
-            CleanupService.Run(() => { }, Path.Combine(directory, "absent", "settings.json"), Path.Combine(link, "settings.json"));
+            CleanupService.Run(() => { }, Path.Combine(link, "settings.json"));
             return Task.CompletedTask;
         });
         Assert(File.ReadAllText(settings) == sentinel && File.Exists(temporary), "Cleanup crossed a directory link.");
@@ -826,11 +826,11 @@ static Task CleanupPreservesOtherFiles()
 {
     var directory = Path.Combine(Path.GetTempPath(), $"BatteryCharge-cleanup-{Guid.NewGuid():N}");
     var current = Path.Combine(directory, "portable", "settings.json");
-    var legacy = Path.Combine(directory, "legacy", "settings.json");
+    var otherSettings = Path.Combine(directory, "local-data", "BatteryCharge", "settings.json");
     try
     {
         LanguagePreferences.Save(current, "en-US");
-        LanguagePreferences.Save(legacy, "zh-CN");
+        LanguagePreferences.Save(otherSettings, "zh-CN");
         var executable = Path.Combine(Path.GetDirectoryName(current)!, "BatteryCharge.exe");
         var unrelated = Path.Combine(Path.GetDirectoryName(current)!, ".settings-not-a-guid.tmp");
         var temporary = Path.Combine(Path.GetDirectoryName(current)!, $".settings-{Guid.NewGuid():N}.tmp");
@@ -843,17 +843,16 @@ static Task CleanupPreservesOtherFiles()
         {
             removals++;
             Assert(File.Exists(current), "Startup task must be removed before preferences.");
-        }, current, legacy);
+        }, current);
         Assert(removals == 1, "Startup removal must run once.");
-        Assert(!File.Exists(current) && !File.Exists(legacy) && !File.Exists(temporary), "Owned settings were left behind.");
+        Assert(!File.Exists(current) && !File.Exists(temporary), "Owned settings were left behind.");
         Assert(File.Exists(executable) && File.Exists(unrelated) && File.Exists(nested), "Unrelated files were deleted.");
-        Assert(!Directory.Exists(Path.GetDirectoryName(legacy)), "An empty legacy settings folder was left behind.");
-        CleanupService.Run(() => { }, current, legacy); // Repeating a completed cleanup must be harmless.
-        LanguagePreferences.Save(legacy, "zh-CN");
-        var legacyOther = Path.Combine(Path.GetDirectoryName(legacy)!, "other.txt");
-        File.WriteAllText(legacyOther, "Keep");
-        CleanupService.Run(() => { }, current, legacy);
-        Assert(File.Exists(legacyOther), "A nonempty legacy directory must not be removed recursively.");
+        Assert(File.Exists(otherSettings), "Settings outside the program directory must be preserved.");
+        CleanupService.Run(() => { }, current); // Repeating a completed cleanup must be harmless.
+        var emptySettings = Path.Combine(directory, "empty-program", "settings.json");
+        LanguagePreferences.Save(emptySettings, "en-US");
+        CleanupService.Run(() => { }, emptySettings);
+        Assert(Directory.Exists(Path.GetDirectoryName(emptySettings)), "Cleanup must preserve even empty program directories.");
     }
     finally
     {
@@ -867,17 +866,17 @@ static async Task CleanupTaskFailure()
 {
     var directory = Path.Combine(Path.GetTempPath(), $"BatteryCharge-cleanup-{Guid.NewGuid():N}");
     var current = Path.Combine(directory, "portable", "settings.json");
-    var legacy = Path.Combine(directory, "legacy", "settings.json");
+    var temporary = Path.Combine(Path.GetDirectoryName(current)!, $".settings-{Guid.NewGuid():N}.tmp");
     try
     {
         LanguagePreferences.Save(current, "en-US");
-        LanguagePreferences.Save(legacy, "zh-CN");
+        File.WriteAllText(temporary, "Preserve on failure.");
         await Throws<IOException>(() =>
         {
-            CleanupService.Run(() => throw new InvalidOperationException("Scheduler unavailable"), current, legacy);
+            CleanupService.Run(() => throw new InvalidOperationException("Scheduler unavailable"), current);
             return Task.CompletedTask;
         });
-        Assert(File.Exists(current) && File.Exists(legacy), "Task removal failure must preserve preferences for retry.");
+        Assert(File.Exists(current) && File.Exists(temporary), "Task removal failure must preserve preferences for retry.");
     }
     finally
     {
@@ -890,18 +889,18 @@ static async Task CleanupFileFailure()
 {
     var directory = Path.Combine(Path.GetTempPath(), $"BatteryCharge-cleanup-{Guid.NewGuid():N}");
     var current = Path.Combine(directory, "portable", "settings.json");
-    var legacy = Path.Combine(directory, "legacy", "settings.json");
+    var temporary = Path.Combine(Path.GetDirectoryName(current)!, $".settings-{Guid.NewGuid():N}.tmp");
     try
     {
         Directory.CreateDirectory(current); // A directory cannot be deleted using File.Delete.
-        LanguagePreferences.Save(legacy, "zh-CN");
+        File.WriteAllText(temporary, "Preserve on failure.");
         var taskRemoved = false;
         await Throws<IOException>(() =>
         {
-            CleanupService.Run(() => taskRemoved = true, current, legacy);
+            CleanupService.Run(() => taskRemoved = true, current);
             return Task.CompletedTask;
         });
-        Assert(taskRemoved && File.Exists(legacy) && Directory.Exists(current),
+        Assert(taskRemoved && File.Exists(temporary) && Directory.Exists(current),
             "Partial cleanup must report failure and preserve unprocessed files.");
     }
     finally
