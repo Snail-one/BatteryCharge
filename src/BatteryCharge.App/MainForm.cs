@@ -29,6 +29,8 @@ internal sealed class MainForm : Form
     private readonly ToolStripMenuItem _refreshItem = new("刷新状态");
     private readonly ToolStripMenuItem _quitItem = new("退出");
     private readonly NotifyIcon _tray;
+    private readonly Icon _applicationIcon = LoadApplicationIcon();
+    private readonly Icon _trayIcon;
     private ChargeSnapshot? _snapshot;
     private bool _busy;
     private bool _quitting;
@@ -37,7 +39,7 @@ internal sealed class MainForm : Form
     {
         _controller = controller;
         Text = "电池充电助手";
-        Icon = SystemIcons.Information;
+        Icon = _applicationIcon;
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(590, 700);
         MinimumSize = new Size(570, 700);
@@ -46,9 +48,10 @@ internal sealed class MainForm : Form
 
         BuildWindow();
         BuildTrayMenu();
+        _trayIcon = new Icon(_applicationIcon, SystemInformation.SmallIconSize);
         _tray = new NotifyIcon
         {
-            Icon = Icon,
+            Icon = _trayIcon,
             Text = "电池充电助手",
             ContextMenuStrip = _trayMenu,
             Visible = true
@@ -341,9 +344,21 @@ internal sealed class MainForm : Form
         {
             _tray.Visible = false;
             _tray.Dispose();
+            _trayIcon.Dispose();
             _trayMenu.Dispose();
         }
         base.Dispose(disposing);
+        if (disposing)
+            _applicationIcon.Dispose();
+    }
+
+    private static Icon LoadApplicationIcon()
+    {
+        using var stream = typeof(MainForm).Assembly.GetManifestResourceStream(
+            "BatteryCharge.App.Assets.BatteryCharge.ico")
+            ?? throw new InvalidOperationException("Application icon resource is missing.");
+        using var icon = new Icon(stream);
+        return (Icon)icon.Clone();
     }
 
     private static Label TextLabel(string text) => new()
