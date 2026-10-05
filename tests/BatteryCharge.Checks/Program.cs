@@ -25,6 +25,8 @@ var checks = new (string Name, Func<Task> Run)[]
     ("Invalid enum never accesses the device", InvalidModeDoesNotTouchDevice),
     ("Concurrent requests cannot split a mode sequence", ConcurrentRequestsAreSerialized),
     ("Startup task preserves executable paths and interactive battery operation", StartupTaskConfiguration),
+    ("Startup accepts account names that resolve to the current user's SID", StartupAccountNames),
+    ("Startup rejects foreign, unresolved and missing account identities", StartupAccountProtection),
     ("Disabled tasks and logon triggers are reported as disabled", DisabledStartupTask),
     ("Moved executable retains enabled state and reports stale path", MovedStartupExecutable),
     ("Foreign tasks and other users cannot be modified", ForeignStartupTask),
@@ -322,6 +324,79 @@ static Task StartupTaskConfiguration()
     Assert((string?)task.Element(ns + "Triggers")?.Element(ns + "LogonTrigger")?.Element(ns + "UserId") == sid,
         "Startup must apply only to the selected user.");
     return Task.CompletedTask;
+}
+
+static Task StartupAccountNames()
+{
+    const string sid = "S-1-5-21-123-456-789-1001";
+    const string path = @"D:\BatteryCharge\BatteryCharge.exe";
+    XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
+    var task = XElement.Parse(StartupTaskDefinition.Create(sid, path));
+    var trigger = task.Element(ns + "Triggers")!.Element(ns + "LogonTrigger")!;
+    trigger.Element(ns + "UserId")!.Value = @"LAPTOP\Alice";
+    string? Resolve(string account) => account == @"LAPTOP\Alice" ? sid : null;
+    var status = StartupTaskDefinition.Read(task.ToString(), sid, path, Resolve);
+    Assert(status.Enabled && status.UsesCurrentPath,
+        "A registered task returning an account name for the same SID must remain enabled.");
+    task.Element(ns + "Principals")!.Element(ns + "Principal")!.Element(ns + "UserId")!.Value = @"LAPTOP\Alice";
+    status = StartupTaskDefinition.Read(task.ToString(), sid, path, Resolve);
+    Assert(status.Enabled && status.UsesCurrentPath, "The principal can also identify the current user by account name.");
+    StartupTaskDefinition.ParseOwned(task.ToString(), sid, Resolve);
+    trigger.Element(ns + "Enabled")!.Value = "false";
+    Assert(!StartupTaskDefinition.Read(task.ToString(), sid, path, Resolve).Enabled,
+        "Account resolution must not hide a disabled trigger.");
+    trigger.Element(ns + "Enabled")!.Value = "true";
+    status = StartupTaskDefinition.Read(task.ToString(), sid, @"D:\New\BatteryCharge.exe", Resolve);
+    Assert(status.Enabled && !status.UsesCurrentPath, "Account resolution must still detect a moved executable.");
+    StartupTaskDefinition.Read(StartupTaskDefinition.Create(sid, path), sid, path,
+        _ => throw new InvalidOperationException("A SID must not require account lookup."));
+    return Task.CompletedTask;
+}
+
+static async Task StartupAccountProtection()
+{
+    const string sid = "S-1-5-21-123-456-789-1001";
+    const string otherSid = "S-1-5-21-123-456-789-1002";
+    const string path = @"D:\BatteryCharge\BatteryCharge.exe";
+    XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
+    string? Resolve(string account) => account switch
+    {
+        @"LAPTOP\Alice" => sid,
+        @"LAPTOP\Bob" => otherSid,
+        _ => null
+    };
+    foreach (var identity in new[] { @"LAPTOP\Bob", @"LAPTOP\Unknown", otherSid, "", " " })
+    {
+        var task = XElement.Parse(StartupTaskDefinition.Create(sid, path));
+        var triggerUser = task.Element(ns + "Triggers")!.Element(ns + "LogonTrigger")!.Element(ns + "UserId")!;
+        triggerUser.Value = identity;
+        Assert(!StartupTaskDefinition.Read(task.ToString(), sid, path, Resolve).Enabled,
+            "A foreign, unresolved or empty trigger identity must not enable startup.");
+        triggerUser.Value = sid;
+        task.Element(ns + "Principals")!.Element(ns + "Principal")!.Element(ns + "UserId")!.Value = identity;
+        await Throws<InvalidOperationException>(() =>
+        {
+            StartupTaskDefinition.ParseOwned(task.ToString(), sid, Resolve);
+            return Task.CompletedTask;
+        });
+    }
+    var missing = XElement.Parse(StartupTaskDefinition.Create(sid, path));
+    missing.Element(ns + "Triggers")!.Element(ns + "LogonTrigger")!.Element(ns + "UserId")!.Remove();
+    Assert(!StartupTaskDefinition.Read(missing.ToString(), sid, path, Resolve).Enabled,
+        "An all-users trigger must not count as startup for the current user.");
+    missing.Element(ns + "Principals")!.Element(ns + "Principal")!.Element(ns + "UserId")!.Remove();
+    await Throws<InvalidOperationException>(() =>
+    {
+        StartupTaskDefinition.ParseOwned(missing.ToString(), sid, Resolve);
+        return Task.CompletedTask;
+    });
+    var foreign = XElement.Parse(StartupTaskDefinition.Create(sid, path));
+    foreign.Element(ns + "RegistrationInfo")!.Element(ns + "Source")!.Value = "AnotherApp";
+    await Throws<InvalidOperationException>(() =>
+    {
+        StartupTaskDefinition.ParseOwned(foreign.ToString(), sid, Resolve);
+        return Task.CompletedTask;
+    });
 }
 
 static Task MissingStartupTask()

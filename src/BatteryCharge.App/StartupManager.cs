@@ -26,7 +26,7 @@ internal sealed class StartupManager : IStartupManager
         try
         {
             return task is null ? new StartupRegistration(false, true)
-                : StartupTaskDefinition.Read((string)((dynamic)task).Xml, _userSid, _executablePath);
+                : StartupTaskDefinition.Read((string)((dynamic)task).Xml, _userSid, _executablePath, ResolveUserSid);
         }
         finally
         {
@@ -46,7 +46,7 @@ internal sealed class StartupManager : IStartupManager
             try
             {
                 if (existing is not null)
-                    StartupTaskDefinition.ParseOwned((string)((dynamic)existing).Xml, _userSid);
+                    StartupTaskDefinition.ParseOwned((string)((dynamic)existing).Xml, _userSid, ResolveUserSid);
 
                 if (enabled)
                 {
@@ -71,6 +71,18 @@ internal sealed class StartupManager : IStartupManager
 
     private object? FindTask(dynamic folder) =>
         StartupTaskLookup.Find(() => folder.GetTask(_taskName));
+
+    private static string? ResolveUserSid(string accountName)
+    {
+        try
+        {
+            return ((SecurityIdentifier)new NTAccount(accountName).Translate(typeof(SecurityIdentifier))).Value;
+        }
+        catch (IdentityNotMappedException)
+        {
+            return null;
+        }
+    }
 
     public void RemoveForCleanup()
     {

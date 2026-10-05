@@ -42,26 +42,28 @@ internal static class StartupTaskDefinition
         return task.ToString(SaveOptions.DisableFormatting);
     }
 
-    internal static XElement ParseOwned(string xml, string userSid)
+    internal static XElement ParseOwned(string xml, string userSid, Func<string, string?>? resolveUserSid = null)
     {
         var task = XElement.Parse(xml);
         if (task.Name != Ns + "Task"
             || (string?)task.Element(Ns + "RegistrationInfo")?.Element(Ns + "Source") != Owner
-            || (string?)task.Element(Ns + "Principals")?.Element(Ns + "Principal")?.Element(Ns + "UserId") != userSid)
+            || !MatchesUser((string?)task.Element(Ns + "Principals")?.Element(Ns + "Principal")?.Element(Ns + "UserId"),
+                userSid, resolveUserSid))
             throw new InvalidOperationException(UiText.Get("ForeignStartupTask"));
         return task;
     }
 
-    internal static StartupRegistration Read(string xml, string userSid, string executablePath)
+    internal static StartupRegistration Read(string xml, string userSid, string executablePath,
+        Func<string, string?>? resolveUserSid = null)
     {
-        var task = ParseOwned(xml, userSid);
+        var task = ParseOwned(xml, userSid, resolveUserSid);
         var principal = task.Element(Ns + "Principals")?.Element(Ns + "Principal");
         var trigger = task.Element(Ns + "Triggers")?.Element(Ns + "LogonTrigger");
         var actions = task.Element(Ns + "Actions")?.Elements().ToArray();
         var enabled = (bool?)task.Element(Ns + "Settings")?.Element(Ns + "Enabled") != false
             && trigger is not null
             && (bool?)trigger.Element(Ns + "Enabled") != false
-            && (string?)trigger.Element(Ns + "UserId") == userSid
+            && MatchesUser((string?)trigger.Element(Ns + "UserId"), userSid, resolveUserSid)
             && (string?)principal?.Element(Ns + "LogonType") == "InteractiveToken"
             && (string?)principal?.Element(Ns + "RunLevel") == "HighestAvailable"
             && actions is { Length: 1 }
@@ -70,5 +72,19 @@ internal static class StartupTaskDefinition
         var usesCurrentPath = actions is { Length: 1 }
             && string.Equals((string?)actions[0].Element(Ns + "Command"), executablePath, StringComparison.OrdinalIgnoreCase);
         return new StartupRegistration(enabled, usesCurrentPath);
+    }
+
+    private static bool MatchesUser(string? taskUserId, string userSid, Func<string, string?>? resolveUserSid)
+    {
+        if (string.IsNullOrWhiteSpace(taskUserId))
+            return false;
+        if (string.Equals(taskUserId, userSid, StringComparison.OrdinalIgnoreCase))
+            return true;
+        // Task Scheduler accepts both SIDs and account names. Compare identities,
+        // not their XML spelling, while still rejecting tasks for other users.
+        if (taskUserId.StartsWith("S-1-", StringComparison.OrdinalIgnoreCase))
+            return false;
+        return resolveUserSid is not null
+            && string.Equals(resolveUserSid(taskUserId), userSid, StringComparison.OrdinalIgnoreCase);
     }
 }
