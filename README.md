@@ -154,7 +154,14 @@ dotnet run --project tests/BatteryCharge.Checks/BatteryCharge.Checks.csproj -c R
 
 Windows 界面检查使用模拟设备与模拟启动注册，运行实际窗口并生成中英文、明暗主题、窄窗口和错误状态的截图，执行命令与检查范围见 [桌面 UI 设计](docs/desktop-ui.md)。
 
-根目录的 `.github/workflows/build.yml` 会执行 Linux 和 Windows 行为检查、Windows 界面检查，并生成界面截图与两个 Windows 发布包。工作流只构建和上传产物，不发布 Release。
+根目录的 `.github/workflows/build.yml` 仅在推送任意名称的 tag 时运行；普通分支推送、PR 和手动操作不触发构建。工作流执行 Linux 和 Windows 行为检查、Windows 界面检查，并生成界面截图与两个 Windows 发布包，只构建和上传产物，不发布 Release。例如：
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+`.github/dependabot.yml` 配置 Dependabot 每周一检查 GitHub Actions、`global.json` 中的 .NET SDK 和四个项目的 NuGet 依赖，发现更新时自动创建 PR。Actions 和 NuGet 更新分别合并为一组，SDK 不跨主版本升级，保持 .NET 10。当前没有第三方 NuGet 包，该配置也覆盖后续加入的包。Dependabot PR 不触发上述构建，也不会自动合并；配置进入 GitHub 默认分支后生效。配置选项见 [GitHub Dependabot 文档](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference)。
 
 ## Windows 实机验证
 
