@@ -22,7 +22,7 @@ internal sealed partial class MainForm
     private TableLayoutPanel _shell = null!;
     private FluentModePanel _modeGrid = null!;
     private Panel _sidebar = null!;
-    private Panel _viewport = null!;
+    private FluentViewport _viewport = null!;
     private FluentStackPanel _overviewPage = null!;
     private FluentStackPanel _settingsPage = null!;
     private FlowLayoutPanel _compactNavigation = null!;
@@ -105,6 +105,8 @@ internal sealed partial class MainForm
         _powerTimer.Tick += (_, _) => { if (Visible) RenderPower(); };
         _powerTimer.Start();
         _apply.Name = "ApplyModeButton"; _night.Name = "NightToggle"; _startup.Name = "StartupToggle";
+        _compactOverview.Name = "CompactOverviewNavigation"; _compactSettings.Name = "CompactSettingsNavigation";
+        _detailsButton.Name = "DiagnosticToggleButton";
         _languagePicker.Name = "LanguagePicker"; _details.Name = "DiagnosticDetails"; _refresh.Name = "RefreshButton";
         _settingsNav.Name = "SettingsNavigation"; _overviewNav.Name = "OverviewNavigation";
         _overviewPage.Name = "OverviewPage"; _settingsPage.Name = "SettingsPage";
@@ -113,6 +115,9 @@ internal sealed partial class MainForm
 
     private FluentStackPanel BuildOverview()
     {
+        // Working/success/error text can wrap differently. Keep room for two lines
+        // so the transient refresh message does not shrink the scroll range.
+        _status.MinimumSize = new Size(0, _status.Font.Height * 2 + 3);
         _batteryLevel.Font = OwnFont(34, FontStyle.Bold);
         _batteryLevel.Margin = new Padding(0, 0, 0, 2);
         _powerState.Margin = new Padding(0, 2, 0, 0);
@@ -182,13 +187,14 @@ internal sealed partial class MainForm
     private void SetPage(bool settings)
     {
         using var layout = new FluentLayoutBatch(_shell);
+        var changed = _settingsVisible != settings;
         _settingsVisible = settings;
         _overviewPage.Visible = !settings; _settingsPage.Visible = settings;
         _overviewNav.Selected = _compactOverview.Selected = !settings;
         _settingsNav.Selected = _compactSettings.Selected = settings;
         _pageTitle.Text = T(settings ? "SettingsTitle" : "OverviewTitle");
         _pageSubtitle.Text = T(settings ? "SettingsSubtitle" : "OverviewSubtitle");
-        _viewport.AutoScrollPosition = Point.Empty;
+        if (changed) _viewport.AutoScrollPosition = Point.Empty;
     }
 
     private void UpdateResponsiveLayout()
@@ -212,6 +218,7 @@ internal sealed partial class MainForm
 
     private void RenderPower()
     {
+        using var scroll = _viewport.PreserveScroll();
         using var layout = new FluentLayoutBatch(_overviewPage);
         var power = SystemInformation.PowerStatus;
         var percent = power.BatteryLifePercent;
@@ -223,11 +230,14 @@ internal sealed partial class MainForm
         { PowerLineStatus.Online => "PowerOnline", PowerLineStatus.Offline => "PowerOffline", _ => "PowerUnknown" });
     }
 
-    private void SetStatus(string text, StatusTone tone = StatusTone.Info)
+    private void SetStatus(string text, StatusTone tone = StatusTone.Info, bool showOverviewOnError = true)
     {
+        if (tone == StatusTone.Error && showOverviewOnError) SetPage(false);
+        using var scroll = _viewport.PreserveScroll();
+        using var layout = new FluentLayoutBatch(_overviewPage);
         _statusTone = tone; _status.Text = text;
         _status.ForeColor = tone switch { StatusTone.Success => _palette.Success, StatusTone.Error => _palette.Error, _ => _palette.Secondary };
-        if (tone == StatusTone.Error) { SetPage(false); _diagnostics.Visible = true; _detailsButton.Text = T("HideDetails"); }
+        if (tone == StatusTone.Error) { _diagnostics.Visible = true; _detailsButton.Text = T("HideDetails"); }
     }
 
     private void SetStartupInfo(string text, bool error = false)

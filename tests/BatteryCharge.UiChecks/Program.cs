@@ -54,8 +54,6 @@ internal static class Program
         var rapid = Find<ModeCard>(form, "ModeCardRapidCharge");
         var apply = Find<Button>(form, "ApplyModeButton");
         var refresh = Find<Button>(form, "RefreshButton");
-        var settings = Find<Button>(form, "SettingsNavigation");
-        var overview = Find<Button>(form, "OverviewNavigation");
         await UntilAsync(() => refresh.Enabled && normal.IsCurrent);
         CheckRendering();
         var scale = form.DeviceDpi / 96f;
@@ -76,7 +74,7 @@ internal static class Program
         await UntilAsync(() => refresh.Enabled && night.Checked);
         Assert(transport.Writes.Last() == 0x80000012, "The switch did not enable night charging.");
         rapid.PerformClick();
-        settings.PerformClick();
+        Navigate(form, true);
         var startupToggle = Find<CheckBox>(form, "StartupToggle");
         startupToggle.AccessibilityObject.DoDefaultAction();
         await UntilAsync(() => startupToggle.Enabled && startupToggle.Checked);
@@ -87,7 +85,7 @@ internal static class Program
         await UntilAsync(() => UiText.Language == "en-US" && refresh.Enabled && language.Enabled);
         Assert(rapid.Checked && conservation.IsCurrent, "Changing language discarded the pending choice or altered actual state.");
         Assert(transport.Writes.Count == writes && startup.Changes == 1, "Changing language wrote charging or startup settings.");
-        overview.PerformClick();
+        Navigate(form, false);
         Assert(rapid.Text == UiText.ModeName(ChargeMode.RapidCharge), "The mode cards did not change language.");
         Directory.CreateDirectory(screenshots);
         foreach (var palette in new[] { FluentPalette.Light, FluentPalette.Dark })
@@ -95,17 +93,17 @@ internal static class Program
             form.ApplyPalette(palette);
             var name = palette.IsDark ? "dark" : "light";
             Capture(form, Path.Combine(screenshots, $"overview-en-{name}.png"));
-            settings.PerformClick();
+            Navigate(form, true);
             Capture(form, Path.Combine(screenshots, $"settings-en-{name}.png"));
             language.SelectedIndex = 0;
             await UntilAsync(() => UiText.Language == "zh-CN" && refresh.Enabled && language.Enabled);
-            overview.PerformClick();
+            Navigate(form, false);
             Capture(form, Path.Combine(screenshots, $"overview-zh-{name}.png"));
-            settings.PerformClick();
+            Navigate(form, true);
             Capture(form, Path.Combine(screenshots, $"settings-zh-{name}.png"));
             language.SelectedIndex = 1;
             await UntilAsync(() => UiText.Language == "en-US" && refresh.Enabled && language.Enabled);
-            overview.PerformClick();
+            Navigate(form, false);
         }
         form.ClientSize = new Size((int)(640 * scale), (int)(620 * scale));
         form.PerformLayout();
@@ -127,7 +125,90 @@ internal static class Program
             "The underlying error must be available in the diagnostic panel.");
         Capture(form, Path.Combine(screenshots, "overview-unavailable.png"));
         await CheckLayoutsAsync(form, screenshots);
-        await CheckSlowReadAsync(form, transport, refresh, settings, overview);
+        await CheckSlowReadAsync(form, transport, refresh);
+        await CheckRefreshPositionAsync(form, transport);
+    }
+
+    private static async Task CheckRefreshPositionAsync(MainForm form, PreviewTransport transport)
+    {
+        var refresh = Find<Button>(form, "RefreshButton");
+        var viewport = Find<Panel>(form, "PageViewport");
+        var scale = form.DeviceDpi / 96f;
+        var previousError = transport.ModeError;
+        var writes = transport.Writes.Count;
+        form.ClientSize = new Size((int)(640 * scale), (int)(480 * scale));
+        try
+        {
+            foreach (var failure in new[] { false, true })
+            {
+                transport.ReadError = failure ? new InvalidOperationException("Simulated refresh failure.") : null;
+                foreach (var settingsPage in new[] { false, true })
+                {
+                    Navigate(form, settingsPage);
+                    await Task.Delay(20);
+                    refresh.Focus();
+                    viewport.AutoScrollPosition = new Point(0, (int)(40 * scale));
+                    var position = viewport.AutoScrollPosition;
+                    var bounds = form.Bounds;
+                    var completedPage = settingsPage;
+                    Assert(position.Y < 0, "Refresh regression requires an already scrolled page.");
+                    using var started = new ManualResetEventSlim();
+                    using var release = new ManualResetEventSlim();
+                    transport.ReadStarted = started;
+                    transport.ReadRelease = release;
+                    try
+                    {
+                        refresh.PerformClick();
+                        await UntilAsync(() => started.IsSet);
+                        Assert(viewport.AutoScrollPosition == position,
+                            "Disabling the focused refresh button moved the page before the read finished.");
+                        Assert(Find<Panel>(form, settingsPage ? "SettingsPage" : "OverviewPage").Visible,
+                            "Starting a refresh switched the page.");
+                        // A user may scroll or navigate while I/O runs. Completion must
+                        // preserve that newer position rather than restoring a stale one.
+                        if (!failure && !settingsPage)
+                        {
+                            Navigate(form, true);
+                            completedPage = true;
+                        }
+                        viewport.AutoScrollPosition = new Point(0, (int)(20 * scale));
+                        position = viewport.AutoScrollPosition;
+                    }
+                    finally { transport.ReadStarted = null; transport.ReadRelease = null; release.Set(); }
+                    await UntilAsync(() => refresh.Enabled);
+                    Assert(viewport.AutoScrollPosition == position, "Completing a refresh changed the current scroll position.");
+                    Assert(Find<Panel>(form, completedPage ? "SettingsPage" : "OverviewPage").Visible,
+                        "A refresh failure forced navigation to another page.");
+                    Assert(form.Bounds == bounds, "Refreshing moved or resized the window.");
+                }
+            }
+
+            transport.ReadError = null;
+            transport.ModeError = previousError;
+            Navigate(form, false);
+            refresh.PerformClick();
+            await UntilAsync(() => refresh.Enabled);
+            var details = Find<TextBox>(form, "DiagnosticDetails");
+            if (details.Visible) Find<Button>(form, "DiagnosticToggleButton").PerformClick();
+            refresh.Focus();
+            viewport.AutoScrollPosition = new Point(0, (int)(20 * scale));
+            var collapsedPosition = viewport.AutoScrollPosition;
+            refresh.PerformClick();
+            await UntilAsync(() => refresh.Enabled);
+            Assert(!details.Visible, "Refreshing the same device error reopened collapsed diagnostics.");
+            Assert(viewport.AutoScrollPosition == collapsedPosition, "Refreshing collapsed diagnostics moved the page.");
+            Assert(transport.Writes.Count == writes, "Refresh position checks wrote to firmware.");
+        }
+        finally { transport.ReadError = null; transport.ModeError = previousError; }
+        Console.WriteLine("PASS Refresh preserves the page, scroll position and collapsed diagnostics, including failures.");
+    }
+
+    private static void Navigate(Control form, bool settings)
+    {
+        var name = settings ? "SettingsNavigation" : "OverviewNavigation";
+        var button = Find<Button>(form, name);
+        if (!button.Visible) button = Find<Button>(form, settings ? "CompactSettingsNavigation" : "CompactOverviewNavigation");
+        button.PerformClick();
     }
 
     private static async Task CheckLayoutsAsync(MainForm form, string screenshots)
@@ -135,12 +216,10 @@ internal static class Program
         var scale = form.DeviceDpi / 96f;
         var language = Find<ComboBox>(form, "LanguagePicker");
         var refresh = Find<Button>(form, "RefreshButton");
-        var settings = Find<Button>(form, "SettingsNavigation");
-        var overview = Find<Button>(form, "OverviewNavigation");
         var viewport = Find<Panel>(form, "PageViewport");
         foreach (var languageIndex in new[] { 0, 1 })
         {
-            settings.PerformClick();
+            Navigate(form, true);
             language.SelectedIndex = languageIndex;
             await UntilAsync(() => language.Enabled && refresh.Enabled);
             foreach (var width in new[] { 640, 800, 819, 820, 900, 1020 })
@@ -148,7 +227,7 @@ internal static class Program
                 form.ClientSize = new Size((int)(width * scale), (int)(620 * scale));
                 foreach (var settingsPage in new[] { false, true })
                 {
-                    (settingsPage ? settings : overview).PerformClick();
+                    Navigate(form, settingsPage);
                     await Task.Delay(20);
                     CheckGeometry(form);
                     var page = Find<Panel>(form, settingsPage ? "SettingsPage" : "OverviewPage");
@@ -164,7 +243,7 @@ internal static class Program
             }
         }
 
-        overview.PerformClick();
+        Navigate(form, false);
         form.ClientSize = new Size((int)(640 * scale), (int)(620 * scale));
         var card = Find<ModeCard>(form, "ModeCardConservation");
         var description = card.Description;
@@ -191,8 +270,8 @@ internal static class Program
         await Task.Delay(20);
         var visibleDetails = viewport.RectangleToClient(details.RectangleToScreen(details.ClientRectangle));
         Assert(viewport.ClientRectangle.IntersectsWith(visibleDetails), "Expanded diagnostics cannot be reached by scrolling.");
-        settings.PerformClick();
-        overview.PerformClick();
+        Navigate(form, true);
+        Navigate(form, false);
         await Task.Delay(20);
         Assert(viewport.AutoScrollPosition == Point.Empty, "Changing pages must reset the old scroll offset.");
 
@@ -228,7 +307,7 @@ internal static class Program
                 $"Sibling controls overlap: {children[first].GetType().Name} and {children[second].GetType().Name} in {parent.GetType().Name}.");
     }
 
-    private static async Task CheckSlowReadAsync(MainForm form, PreviewTransport transport, Button refresh, Button settings, Button overview)
+    private static async Task CheckSlowReadAsync(MainForm form, PreviewTransport transport, Button refresh)
     {
         using var started = new ManualResetEventSlim();
         using var release = new ManualResetEventSlim();
@@ -242,11 +321,11 @@ internal static class Program
             using var heartbeat = new System.Windows.Forms.Timer { Interval = 20 };
             heartbeat.Tick += (_, _) => ticks++;
             heartbeat.Start();
-            settings.PerformClick();
+            Navigate(form, true);
             Assert(Find<Panel>(form, "SettingsPage").Visible, "Navigation is blocked while reading a slow device.");
             await Task.Delay(150);
             Assert(ticks > 0 && !refresh.Enabled, "The UI message loop stopped while a device read was pending.");
-            overview.PerformClick();
+            Navigate(form, false);
         }
         finally { transport.ReadStarted = null; transport.ReadRelease = null; release.Set(); }
         await UntilAsync(() => refresh.Enabled);
@@ -410,6 +489,7 @@ internal sealed class PreviewTransport : IEnergyTransport
     private uint _mode;
     private uint _night = 1;
     internal Exception? ModeError { get; set; }
+    internal Exception? ReadError { get; set; }
     internal List<uint> Writes { get; } = [];
     internal ManualResetEventSlim? ReadStarted { get; set; }
     internal ManualResetEventSlim? ReadRelease { get; set; }
@@ -421,6 +501,7 @@ internal sealed class PreviewTransport : IEnergyTransport
             ReadStarted?.Set();
             if (!release.Wait(TimeSpan.FromSeconds(5))) throw new TimeoutException("Slow UI check did not release the device read.");
         }
+        if (ReadError is not null) throw ReadError;
         return controlCode switch
         {
         ChargeProtocol.ModeControlCode => ModeError is null ? _mode : throw ModeError,

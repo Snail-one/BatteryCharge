@@ -281,7 +281,7 @@ internal sealed partial class MainForm : Form
         return _snapshot is { Mode.IsAvailable: true, NightCharge.IsAvailable: true }
             ? T("StatusUpdated")
             : T("StatusPartial");
-    }, refreshAfter: false);
+    }, refreshAfter: false, showOverviewOnError: false);
 
     private Task ApplyModeAsync(ChargeMode mode) => PerformAsync(async () =>
     {
@@ -398,7 +398,7 @@ internal sealed partial class MainForm : Form
         }
     }
 
-    private async Task PerformAsync(Func<Task<string>> operation, bool refreshAfter = true)
+    private async Task PerformAsync(Func<Task<string>> operation, bool refreshAfter = true, bool showOverviewOnError = true)
     {
         if (_busy || _startupBusy || _languageBusy || _cleanupBusy)
             return;
@@ -434,7 +434,7 @@ internal sealed partial class MainForm : Form
                     card.IsCurrent = false;
             }
 
-            SetStatus(T("OperationFailed"), StatusTone.Error);
+            SetStatus(T("OperationFailed"), StatusTone.Error, showOverviewOnError);
             _details.Text = error.Message + Environment.NewLine + _details.Text;
             if (!Visible)
             {
@@ -451,14 +451,18 @@ internal sealed partial class MainForm : Form
 
     private async Task LoadSnapshotAsync()
     {
+        var previous = _snapshot;
         _snapshot = await _controller.ReadAsync();
-        RenderSnapshot();
+        var newProblem = _snapshot.Mode.Error is not null && _snapshot.Mode.Error != previous?.Mode.Error
+            || _snapshot.NightCharge.Error is not null && _snapshot.NightCharge.Error != previous?.NightCharge.Error;
+        RenderSnapshot(revealProblems: newProblem);
     }
 
-    private void RenderSnapshot(bool updateSelection = true)
+    private void RenderSnapshot(bool updateSelection = true, bool revealProblems = true)
     {
         if (_snapshot is null)
             return;
+        using var scroll = _viewport.PreserveScroll();
         using var layout = new FluentLayoutBatch(_overviewPage);
         var mode = _snapshot.Mode.Value;
         _modeState.Text = mode.HasValue ? ModeName(mode.Value) : T("ModeUnavailable");
@@ -486,7 +490,7 @@ internal sealed partial class MainForm : Form
         _details.Text = problems.Count == 0
             ? T("HealthyDetails")
             : string.Join(Environment.NewLine + Environment.NewLine, problems);
-        if (problems.Count > 0)
+        if (problems.Count > 0 && revealProblems)
         {
             _diagnostics.Visible = true;
             _detailsButton.Text = T("HideDetails");
@@ -502,8 +506,21 @@ internal sealed partial class MainForm : Form
 
     private void UpdateEnabledState()
     {
+        using var scroll = _viewport.PreserveScroll();
         using var layout = new FluentLayoutBatch(_overviewPage);
         var idle = !_busy && !_startupBusy && !_languageBusy && !_cleanupBusy;
+        var focusedWillBeDisabled = _refresh.ContainsFocus || _apply.ContainsFocus || _night.ContainsFocus
+            || _startup.ContainsFocus || _cleanup.ContainsFocus || _languagePicker.ContainsFocus
+            || _modeCards.Values.Any(card => card.ContainsFocus);
+        if (!idle && focusedWillBeDisabled)
+        {
+            // Disabling the focused refresh button otherwise sends focus through
+            // page controls, and AutoScroll follows each newly focused control.
+            var navigation = _settingsVisible
+                ? (_sidebar.Visible ? _settingsNav : _compactSettings)
+                : (_sidebar.Visible ? _overviewNav : _compactOverview);
+            navigation.Focus();
+        }
         var modeAvailable = idle && _snapshot?.Mode.IsAvailable == true;
         foreach (var card in _modeCards.Values)
             card.Enabled = modeAvailable;

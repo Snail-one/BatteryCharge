@@ -185,8 +185,38 @@ internal sealed class FluentModePanel : FluentContentPanel
 internal sealed class FluentViewport : Panel
 {
     private bool _layingOut;
+    private int _scrollPreservationDepth;
 
     internal FluentViewport() { DoubleBuffered = true; AutoScroll = true; }
+
+    internal IDisposable PreserveScroll() => new ScrollPositionScope(this);
+
+    protected override Point ScrollToControl(Control activeControl) => _scrollPreservationDepth > 0
+        ? AutoScrollPosition : base.ScrollToControl(activeControl);
+
+    private sealed class ScrollPositionScope : IDisposable
+    {
+        private readonly FluentViewport _viewport;
+        private readonly Point _position;
+        private bool _disposed;
+
+        internal ScrollPositionScope(FluentViewport viewport)
+        {
+            _viewport = viewport;
+            _position = viewport.AutoScrollPosition;
+            viewport._scrollPreservationDepth++;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _viewport._scrollPreservationDepth--;
+            if (!_viewport.IsDisposed && _viewport.AutoScrollPosition != _position)
+                // The getter returns negative offsets; the setter expects positive ones.
+                _viewport.AutoScrollPosition = new Point(-_position.X, -_position.Y);
+        }
+    }
 
     protected override void OnVisibleChanged(EventArgs e)
     {
