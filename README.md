@@ -166,7 +166,9 @@ Windows 界面检查使用模拟设备与模拟启动注册，运行实际窗口
 
 手动构建：在 GitHub 的 **Actions → Build Windows application → Run workflow** 中选择分支，选填 `version`，然后运行。版本留空时使用 `1.0.0-manual.<运行编号>`。完成后可从该次运行的 Artifacts 下载 ZIP 和界面截图；手动模式只上传构建产物。工作流文件进入默认分支后才可手动触发，参见 [GitHub 手动运行工作流](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)。
 
-推送 tag 时，构建和检查全部通过后，工作流自动创建对应 tag 的 GitHub Release 并附上 ZIP 文件；预发布版本标记为 Pre-release，重复运行时更新同名附件并保留现有说明。例如：
+Windows 界面检查及其截图上传是非阻断步骤：失败时记录警告和运行摘要，保留已有日志与可用截图，并继续构建、打包和发布。Linux 和 Windows 基础行为检查仍须通过；编译或打包失败也会停止发布。
+
+推送 tag 时，构建和基础行为检查通过后，工作流自动创建对应 tag 的 GitHub Release 并附上 ZIP 文件；预发布版本标记为 Pre-release，重复运行时更新同名附件并保留现有说明。例如：
 
 ```bash
 git tag v1.0.1

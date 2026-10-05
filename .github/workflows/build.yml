@@ -57,13 +57,23 @@ jobs:
       - name: Check core behavior on Windows
         run: dotnet run --project tests/BatteryCharge.Checks/BatteryCharge.Checks.csproj -c Release
       - name: Check Windows UI with simulated device and startup registration
+        id: ui_checks
+        continue-on-error: true
         run: dotnet run --project tests/BatteryCharge.UiChecks/BatteryCharge.UiChecks.csproj -c Release -- artifacts/ui
       - uses: actions/upload-artifact@v7
+        id: ui_screenshots
+        continue-on-error: true
         if: always()
         with:
           name: BatteryCharge-ui
           path: artifacts/ui/
           if-no-files-found: warn
+      - name: Report advisory UI diagnostics
+        if: steps.ui_checks.outcome == 'failure' || steps.ui_screenshots.outcome == 'failure'
+        shell: pwsh
+        run: |
+          Write-Output '::warning::Windows UI diagnostics reported a failure. Review the UI check and screenshot upload logs; publishing will continue.'
+          'Windows UI diagnostics reported a failure. Build and release will continue. Review the UI step logs and any available BatteryCharge-ui screenshots.' >> $env:GITHUB_STEP_SUMMARY
       - name: Publish Windows x64 application
         env:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}

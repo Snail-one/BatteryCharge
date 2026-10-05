@@ -88,7 +88,9 @@ internal static class Program
         Navigate(form, false);
         Assert(rapid.Text == UiText.ModeName(ChargeMode.RapidCharge), "The mode cards did not change language.");
         Directory.CreateDirectory(screenshots);
-        await CheckHeaderLayoutAsync(form, startup);
+        await CheckHeaderLayoutAsync();
+        Assert(rapid.Checked && conservation.IsCurrent && transport.Writes.Count == writes && startup.Changes == 1,
+            "Header layout checks must leave the main scenario's pending selection, device and startup state untouched.");
         foreach (var palette in new[] { FluentPalette.Light, FluentPalette.Dark })
         {
             form.ApplyPalette(palette);
@@ -132,9 +134,18 @@ internal static class Program
         await CheckStartupWarningAsync(form, transport, startup, screenshots);
     }
 
-    private static async Task CheckHeaderLayoutAsync(MainForm form, PreviewStartup startup)
+    private static async Task CheckHeaderLayoutAsync()
     {
+        // This check refreshes device state. Use a separate fixture so those
+        // reads cannot reset the pending mode selection in the main scenario.
+        var transport = new PreviewTransport();
+        var startup = new PreviewStartup();
+        using var form = new MainForm(new ChargeController(transport, 3, TimeSpan.Zero),
+            startupManager: startup,
+            preferencesPath: Path.Combine(Path.GetTempPath(), $"BatteryCharge-header-{Guid.NewGuid():N}.json"));
+        form.Show();
         var refresh = Find<Button>(form, "RefreshButton");
+        await UntilAsync(() => refresh.Enabled && Find<ModeCard>(form, "ModeCardNormal").IsCurrent);
         var compact = Find<FlowLayoutPanel>(form, "CompactNavigation");
         var warning = Find<FluentSurface>(form, "StartupPathWarning");
         var viewport = Find<Panel>(form, "PageViewport");
@@ -167,6 +178,7 @@ internal static class Program
                 }
             }
             Assert(startup.Changes == changes, "Header reflow must not change the startup task.");
+            Assert(transport.Writes.Count == 0, "Header reflow must not write charging settings.");
         }
         finally
         {
