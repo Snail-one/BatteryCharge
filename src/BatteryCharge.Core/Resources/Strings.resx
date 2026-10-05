@@ -246,4 +246,37 @@
   <data xml:space="preserve" name="VerificationFailed">
     <value>{0}设置未生效。目标：{1}；实际：{2}。请刷新状态后重试。</value>
   </data>
+  <data name="Cleanup" xml:space="preserve">
+    <value>清理并退出</value>
+  </data>
+  <data name="CleanupConfirm" xml:space="preserve">
+    <value>将删除本应用的自动启动任务和配置文件，然后退出。
+完成后可手动删除程序文件夹。当前充电模式和夜间充电设置会保留。
+
+是否继续？</value>
+  </data>
+  <data name="CleanupWorking" xml:space="preserve">
+    <value>正在删除自动启动任务和配置文件…</value>
+  </data>
+  <data name="CleanupComplete" xml:space="preserve">
+    <value>自动启动任务和配置已清理。程序即将退出，之后可以删除程序文件夹。</value>
+  </data>
+  <data name="CleanupIncomplete" xml:space="preserve">
+    <value>清理未完成，请查看原因并重试。</value>
+  </data>
+  <data name="CleanupFailed" xml:space="preserve">
+    <value>{0}
+
+清理未完成，程序会保持运行。请处理问题后重试。</value>
+  </data>
+  <data name="CleanupStartupFailed" xml:space="preserve">
+    <value>删除自动启动任务失败：{0}</value>
+  </data>
+  <data name="CleanupSettingsFailed" xml:space="preserve">
+    <value>删除配置失败：{0}
+{1}</value>
+  </data>
+  <data name="CleanupTaskRemains" xml:space="preserve">
+    <value>自动启动任务仍然存在，请重试。</value>
+  </data>
 </root>

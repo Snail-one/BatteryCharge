@@ -14,6 +14,7 @@ internal sealed class MainForm : Form
     private readonly Button _apply = new() { AutoSize = true };
     private readonly CheckBox _night = new() { AutoSize = true, AutoCheck = false };
     private readonly CheckBox _startup = new() { AutoSize = true, AutoCheck = false };
+    private readonly Button _cleanup = new() { AutoSize = true };
     private readonly Label _startupInfo = TextLabel(T("ReadingStartup"));
     private readonly StartupManager _startupManager = new();
     private readonly ChargeIcons _icons = new();
@@ -38,11 +39,13 @@ internal sealed class MainForm : Form
     private readonly ToolStripMenuItem _startupItem = new();
     private readonly ToolStripMenuItem _refreshItem = new();
     private readonly ToolStripMenuItem _quitItem = new();
+    private readonly ToolStripMenuItem _cleanupItem = new();
     private readonly NotifyIcon _tray;
     private ChargeSnapshot? _snapshot;
     private bool? _startupEnabled;
     private bool _startupBusy;
     private bool _languageBusy;
+    private bool _cleanupBusy;
     private bool _updatingLanguage;
     private bool _startInTray;
     private bool _initialized;
@@ -85,6 +88,7 @@ internal sealed class MainForm : Form
         };
         _night.Click += async (_, _) => await ToggleNightAsync();
         _startup.Click += async (_, _) => await ToggleStartupAsync();
+        _cleanup.Click += async (_, _) => await CleanupAndExitAsync();
         _refresh.Click += async (_, _) => await RefreshAsync();
         Shown += async (_, _) => await InitializeAsync();
         Resize += (_, _) =>
@@ -191,6 +195,7 @@ internal sealed class MainForm : Form
         _startupInfo.MaximumSize = new Size(470, 0);
         startupPanel.Controls.Add(Localized(_startup, "StartupToggle"));
         startupPanel.Controls.Add(_startupInfo);
+        startupPanel.Controls.Add(Localized(_cleanup, "Cleanup"));
         layout.Controls.Add(Localized(Card("", startupPanel), "StartupSettings"), 0, 4);
 
         var summary = new FlowLayoutPanel
@@ -250,13 +255,16 @@ internal sealed class MainForm : Form
         _trayMenu.Items.Add(LocalizedMenu(_languageMenu, "LanguageMenu"));
         _refreshItem.Click += async (_, _) => await RefreshAsync();
         _trayMenu.Items.Add(LocalizedMenu(_refreshItem, "Refresh"));
+        _trayMenu.Items.Add(new ToolStripSeparator());
+        _cleanupItem.Click += async (_, _) => await CleanupAndExitAsync();
+        _trayMenu.Items.Add(LocalizedMenu(_cleanupItem, "Cleanup"));
         _quitItem.Click += (_, _) => Quit();
         _trayMenu.Items.Add(LocalizedMenu(_quitItem, "Quit"));
     }
 
     private async Task SwitchLanguageAsync(string language)
     {
-        if (_busy || _startupBusy || _languageBusy || language == UiText.Language)
+        if (_busy || _startupBusy || _languageBusy || _cleanupBusy || language == UiText.Language)
         {
             SelectCurrentLanguage();
             return;
@@ -431,7 +439,7 @@ internal sealed class MainForm : Form
 
     private async Task ToggleStartupAsync()
     {
-        if (_busy || _startupBusy || _languageBusy)
+        if (_busy || _startupBusy || _languageBusy || _cleanupBusy)
             return;
         var enabled = _startupEnabled != true;
         _startupBusy = true;
@@ -460,9 +468,51 @@ internal sealed class MainForm : Form
         }
     }
 
+    private async Task CleanupAndExitAsync()
+    {
+        if (_busy || _startupBusy || _languageBusy || _cleanupBusy)
+            return;
+        _cleanupBusy = true;
+        UpdateEnabledState();
+        try
+        {
+            ShowWindow();
+            if (MessageBox.Show(this, T("CleanupConfirm"), T("AppName"),
+                    MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2)
+                != DialogResult.Yes)
+                return;
+
+            _status.Text = T("CleanupWorking");
+            _status.ForeColor = Color.FromArgb(69, 85, 105);
+            await Task.Run(() => CleanupService.Run(_startupManager.RemoveForCleanup,
+                LanguagePreferences.SettingsPath, LanguagePreferences.LegacySettingsPath));
+            MessageBox.Show(this, T("CleanupComplete"), T("AppName"),
+                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            _quitting = true;
+            Close();
+        }
+        catch (Exception error)
+        {
+            // Reflect task removal even when a later configuration-file deletion failed.
+            await RefreshStartupAsync();
+            _status.Text = T("CleanupIncomplete");
+            _status.ForeColor = Color.FromArgb(174, 49, 49);
+            _details.Text = error.Message;
+            ShowWindow();
+            MessageBox.Show(this, T("CleanupFailed", error.Message), T("AppName"),
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _cleanupBusy = false;
+            if (!IsDisposed)
+                UpdateEnabledState();
+        }
+    }
+
     private async Task PerformAsync(Func<Task<string>> operation, bool refreshAfter = true)
     {
-        if (_busy || _startupBusy || _languageBusy)
+        if (_busy || _startupBusy || _languageBusy || _cleanupBusy)
             return;
 
         _busy = true;
@@ -566,7 +616,7 @@ internal sealed class MainForm : Form
 
     private void UpdateEnabledState()
     {
-        var idle = !_busy && !_startupBusy && !_languageBusy;
+        var idle = !_busy && !_startupBusy && !_languageBusy && !_cleanupBusy;
         var modeAvailable = idle && _snapshot?.Mode.IsAvailable == true;
         _modePicker.Enabled = modeAvailable;
         _apply.Enabled = modeAvailable;
@@ -581,6 +631,8 @@ internal sealed class MainForm : Form
         _quitItem.Enabled = idle;
         _languagePicker.Enabled = idle;
         _languageMenu.Enabled = idle;
+        _cleanup.Enabled = idle;
+        _cleanupItem.Enabled = idle;
     }
 
     private void ShowWindow()
@@ -592,7 +644,7 @@ internal sealed class MainForm : Form
 
     private void Quit()
     {
-        if (_busy || _startupBusy || _languageBusy)
+        if (_busy || _startupBusy || _languageBusy || _cleanupBusy)
         {
             _status.Text = T("WaitBeforeQuit");
             ShowWindow();

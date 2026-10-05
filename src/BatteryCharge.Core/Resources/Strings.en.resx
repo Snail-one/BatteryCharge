@@ -246,4 +246,37 @@
   <data xml:space="preserve" name="VerificationFailed">
     <value>{0} did not take effect. Expected: {1}; actual: {2}. Refresh and try again.</value>
   </data>
+  <data name="Cleanup" xml:space="preserve">
+    <value>Clean up and exit</value>
+  </data>
+  <data name="CleanupConfirm" xml:space="preserve">
+    <value>This will remove this app's startup task and configuration files, then exit.
+You can then delete the application folder. Charging mode and night charging settings will be retained.
+
+Continue?</value>
+  </data>
+  <data name="CleanupWorking" xml:space="preserve">
+    <value>Removing the startup task and configuration files…</value>
+  </data>
+  <data name="CleanupComplete" xml:space="preserve">
+    <value>The startup task and configuration have been removed. The app will now exit. You can then delete the application folder.</value>
+  </data>
+  <data name="CleanupIncomplete" xml:space="preserve">
+    <value>Cleanup is incomplete. Review the details and try again.</value>
+  </data>
+  <data name="CleanupFailed" xml:space="preserve">
+    <value>{0}
+
+Cleanup is incomplete. The app will remain open. Resolve the issue and try again.</value>
+  </data>
+  <data name="CleanupStartupFailed" xml:space="preserve">
+    <value>Could not remove the startup task: {0}</value>
+  </data>
+  <data name="CleanupSettingsFailed" xml:space="preserve">
+    <value>Could not remove configuration: {0}
+{1}</value>
+  </data>
+  <data name="CleanupTaskRemains" xml:space="preserve">
+    <value>The startup task still exists. Please try again.</value>
+  </data>
 </root>

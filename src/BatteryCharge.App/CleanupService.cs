@@ -1,0 +1,48 @@
+using BatteryCharge.Core;
+
+namespace BatteryCharge.App;
+
+internal static class CleanupService
+{
+    internal static void Run(Action removeStartupTask, string settingsPath, string legacySettingsPath)
+    {
+        try
+        {
+            // Keep preferences intact if the startup task could not be removed.
+            removeStartupTask();
+        }
+        catch (Exception error)
+        {
+            throw new IOException(UiText.Get("CleanupStartupFailed", error.Message), error);
+        }
+
+        DeleteSettings(settingsPath, removeEmptyDirectory: false);
+        if (!string.Equals(Path.GetFullPath(settingsPath), Path.GetFullPath(legacySettingsPath), StringComparison.OrdinalIgnoreCase))
+            DeleteSettings(legacySettingsPath, removeEmptyDirectory: true);
+    }
+
+    private static void DeleteSettings(string settingsPath, bool removeEmptyDirectory)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(settingsPath))!;
+        try
+        {
+            if (!Directory.Exists(directory))
+                return;
+            File.Delete(settingsPath);
+            foreach (var temporary in Directory.EnumerateFiles(directory, ".settings-*.tmp", SearchOption.TopDirectoryOnly))
+            {
+                var name = Path.GetFileName(temporary);
+                var token = name[".settings-".Length..^".tmp".Length];
+                if (Guid.TryParseExact(token, "N", out _))
+                    File.Delete(temporary);
+            }
+            // Never delete the executable folder or recursively remove unrelated files.
+            if (removeEmptyDirectory && !Directory.EnumerateFileSystemEntries(directory).Any())
+                Directory.Delete(directory, recursive: false);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            throw new IOException(UiText.Get("CleanupSettingsFailed", settingsPath, error.Message), error);
+        }
+    }
+}

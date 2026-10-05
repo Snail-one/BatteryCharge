@@ -81,6 +81,25 @@ internal sealed class StartupManager
         }
     }
 
+    internal void RemoveForCleanup()
+    {
+        SetEnabled(false);
+        WithFolder(folder =>
+        {
+            object? remaining = FindTask(folder);
+            try
+            {
+                if (remaining is not null)
+                    throw new IOException(UiText.Get("CleanupTaskRemains"));
+                return true;
+            }
+            finally
+            {
+                Release(remaining);
+            }
+        });
+    }
+
     private static T WithFolder<T>(Func<dynamic, T> action)
     {
         object? service = null;

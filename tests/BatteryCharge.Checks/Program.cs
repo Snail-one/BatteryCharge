@@ -25,7 +25,10 @@ var checks = new (string Name, Func<Task> Run)[]
     ("Foreign tasks and other users cannot be modified", ForeignStartupTask),
     ("Language choice is saved and survives restart", LanguagePreferenceRoundTrip),
     ("Missing, damaged and unsupported language settings fall back safely", LanguagePreferenceFallback),
-    ("UI and driver errors switch languages independently of thread culture", LanguageResources)
+    ("UI and driver errors switch languages independently of thread culture", LanguageResources),
+    ("Cleanup removes only app settings and recognized temporary files", CleanupPreservesOtherFiles),
+    ("Startup removal failure preserves configuration for retry", CleanupTaskFailure),
+    ("Configuration deletion failure is reported and preserves remaining files", CleanupFileFailure)
 };
 
 var failures = 0;
@@ -347,6 +350,95 @@ static Task LanguageResources()
         UiText.SetLanguage(original);
     }
     return Task.CompletedTask;
+}
+
+static Task CleanupPreservesOtherFiles()
+{
+    var directory = Path.Combine(Path.GetTempPath(), $"BatteryCharge-cleanup-{Guid.NewGuid():N}");
+    var current = Path.Combine(directory, "portable", "settings.json");
+    var legacy = Path.Combine(directory, "legacy", "settings.json");
+    try
+    {
+        LanguagePreferences.Save(current, "en-US");
+        LanguagePreferences.Save(legacy, "zh-CN");
+        var executable = Path.Combine(Path.GetDirectoryName(current)!, "BatteryCharge.exe");
+        var unrelated = Path.Combine(Path.GetDirectoryName(current)!, ".settings-not-a-guid.tmp");
+        var temporary = Path.Combine(Path.GetDirectoryName(current)!, $".settings-{Guid.NewGuid():N}.tmp");
+        var nested = Path.Combine(Path.GetDirectoryName(current)!, "other-data", "notes.txt");
+        Directory.CreateDirectory(Path.GetDirectoryName(nested)!);
+        foreach (var path in new[] { executable, unrelated, temporary, nested })
+            File.WriteAllText(path, "Keep unless owned by the app.");
+        var removals = 0;
+        CleanupService.Run(() =>
+        {
+            removals++;
+            Assert(File.Exists(current), "Startup task must be removed before preferences.");
+        }, current, legacy);
+        Assert(removals == 1, "Startup removal must run once.");
+        Assert(!File.Exists(current) && !File.Exists(legacy) && !File.Exists(temporary), "Owned settings were left behind.");
+        Assert(File.Exists(executable) && File.Exists(unrelated) && File.Exists(nested), "Unrelated files were deleted.");
+        Assert(!Directory.Exists(Path.GetDirectoryName(legacy)), "An empty legacy settings folder was left behind.");
+        CleanupService.Run(() => { }, current, legacy); // Repeating a completed cleanup must be harmless.
+        LanguagePreferences.Save(legacy, "zh-CN");
+        var legacyOther = Path.Combine(Path.GetDirectoryName(legacy)!, "other.txt");
+        File.WriteAllText(legacyOther, "Keep");
+        CleanupService.Run(() => { }, current, legacy);
+        Assert(File.Exists(legacyOther), "A nonempty legacy directory must not be removed recursively.");
+    }
+    finally
+    {
+        if (Directory.Exists(directory))
+            Directory.Delete(directory, recursive: true);
+    }
+    return Task.CompletedTask;
+}
+
+static async Task CleanupTaskFailure()
+{
+    var directory = Path.Combine(Path.GetTempPath(), $"BatteryCharge-cleanup-{Guid.NewGuid():N}");
+    var current = Path.Combine(directory, "portable", "settings.json");
+    var legacy = Path.Combine(directory, "legacy", "settings.json");
+    try
+    {
+        LanguagePreferences.Save(current, "en-US");
+        LanguagePreferences.Save(legacy, "zh-CN");
+        await Throws<IOException>(() =>
+        {
+            CleanupService.Run(() => throw new InvalidOperationException("Scheduler unavailable"), current, legacy);
+            return Task.CompletedTask;
+        });
+        Assert(File.Exists(current) && File.Exists(legacy), "Task removal failure must preserve preferences for retry.");
+    }
+    finally
+    {
+        if (Directory.Exists(directory))
+            Directory.Delete(directory, recursive: true);
+    }
+}
+
+static async Task CleanupFileFailure()
+{
+    var directory = Path.Combine(Path.GetTempPath(), $"BatteryCharge-cleanup-{Guid.NewGuid():N}");
+    var current = Path.Combine(directory, "portable", "settings.json");
+    var legacy = Path.Combine(directory, "legacy", "settings.json");
+    try
+    {
+        Directory.CreateDirectory(current); // A directory cannot be deleted using File.Delete.
+        LanguagePreferences.Save(legacy, "zh-CN");
+        var taskRemoved = false;
+        await Throws<IOException>(() =>
+        {
+            CleanupService.Run(() => taskRemoved = true, current, legacy);
+            return Task.CompletedTask;
+        });
+        Assert(taskRemoved && File.Exists(legacy) && Directory.Exists(current),
+            "Partial cleanup must report failure and preserve unprocessed files.");
+    }
+    finally
+    {
+        if (Directory.Exists(directory))
+            Directory.Delete(directory, recursive: true);
+    }
 }
 
 sealed class FakeTransport : IEnergyTransport

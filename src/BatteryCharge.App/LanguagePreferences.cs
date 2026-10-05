@@ -6,11 +6,16 @@ namespace BatteryCharge.App;
 
 internal static class LanguagePreferences
 {
-    internal static string SettingsPath => Path.Combine(
+    internal static string SettingsPath => Path.Combine(AppContext.BaseDirectory, "settings.json");
+
+    internal static string LegacySettingsPath => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "BatteryCharge", "settings.json");
 
-    internal static string Load(string path, CultureInfo systemCulture)
+    internal static string Load(string path, CultureInfo systemCulture) =>
+        ReadLanguage(path) ?? UiText.DefaultLanguage(systemCulture);
+
+    private static string? ReadLanguage(string path)
     {
         try
         {
@@ -25,7 +30,7 @@ internal static class LanguagePreferences
         {
             // Missing, unreadable or damaged preferences must not prevent startup.
         }
-        return UiText.DefaultLanguage(systemCulture);
+        return null;
     }
 
     internal static void Save(string path, string language)
