@@ -156,7 +156,11 @@ dotnet run --project tests/BatteryCharge.Checks/BatteryCharge.Checks.csproj -c R
 
 Windows 界面检查使用模拟设备与模拟启动注册，运行实际窗口并生成中英文、明暗主题、窄窗口和错误状态的截图，执行命令与检查范围见 [桌面 UI 设计](docs/desktop-ui.md)。
 
-根目录的 `.github/workflows/build.yml` 仅在推送 tag 时运行；普通分支推送、PR 和手动操作不触发构建。工作流执行 Linux 和 Windows 行为检查、Windows 界面检查，并上传界面截图（`BatteryCharge-ui`）和一个 Windows x64 发布包。发布包按“名字-Windows-架构-版本”命名，例如 tag `v1.0.1` 对应 `BatteryCharge-Windows-x64-1.0.1.zip`；程序内的版本号也采用 tag 版本。标签支持 `v1.0.1`、`1.0.1` 和 `v1.0.1-rc.1` 等版本格式，前导 `v` 不计入版本号。CI 只生成不包含 .NET 运行时的版本，运行电脑需安装 .NET 10 桌面运行时。构建和检查全部通过后，工作流自动创建对应 tag 的 GitHub Release 并附上 ZIP 文件；预发布版本标记为 Pre-release，重复运行时更新同名附件并保留现有说明。例如：
+根目录的 `.github/workflows/build.yml` 支持推送 tag 和手动触发；普通分支推送与 PR 不触发构建。两种模式都执行 Linux 和 Windows 行为检查、Windows 界面检查，并上传界面截图（`BatteryCharge-ui`）和一个 Windows x64 发布包。发布包按“名字-Windows-架构-版本”命名，例如 tag `v1.0.1` 对应 `BatteryCharge-Windows-x64-1.0.1.zip`；程序内的版本号也采用该版本。版本支持 `v1.0.1`、`1.0.1` 和 `v1.0.1-rc.1` 等格式，前导 `v` 不计入版本号。CI 只生成不包含 .NET 运行时的版本，运行电脑需安装 .NET 10 桌面运行时。
+
+手动构建：在 GitHub 的 **Actions → Build Windows application → Run workflow** 中选择分支，选填 `version`，然后运行。版本留空时使用 `1.0.0-manual.<运行编号>`。完成后可从该次运行的 Artifacts 下载 ZIP 和界面截图；手动模式只上传构建产物。工作流文件进入默认分支后才可手动触发，参见 [GitHub 手动运行工作流](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)。
+
+推送 tag 时，构建和检查全部通过后，工作流自动创建对应 tag 的 GitHub Release 并附上 ZIP 文件；预发布版本标记为 Pre-release，重复运行时更新同名附件并保留现有说明。例如：
 
 ```bash
 git tag v1.0.1
