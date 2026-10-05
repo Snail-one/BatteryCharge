@@ -55,26 +55,22 @@ internal sealed partial class MainForm
         trayHint.Dock = DockStyle.Bottom;
         _sidebar.Controls.Add(trayHint);
         _shell.Controls.Add(_sidebar, 0, 0);
-        var main = new FluentTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(24, 26, 24, 16), Margin = Padding.Empty };
+        var main = new FluentTableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(24, 26, 24, 16), Margin = Padding.Empty };
         main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         main.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        _compactNavigation = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, Margin = new Padding(0, 0, 0, 12), Visible = false };
+        _compactNavigation = new FlowLayoutPanel { Name = "CompactNavigation", AutoSize = true, Dock = DockStyle.Top, Margin = new Padding(0, 0, 0, 12), Visible = false };
         _compactNavigation.Controls.Add(Localized(_compactOverview, "OverviewNav"));
         _compactNavigation.Controls.Add(Localized(_compactSettings, "SettingsNav"));
-        main.Controls.Add(_compactNavigation, 0, 0);
         _pageTitle.Font = OwnFont(25, FontStyle.Bold);
         _pageTitle.Margin = new Padding(0, 0, 0, 6);
         _pageSubtitle.Margin = Padding.Empty;
         _secondaryLabels.Add(_pageSubtitle);
         var header = new FluentRowPanel(null, VerticalPanel(0, _pageTitle, _pageSubtitle), Localized(_refresh, "Refresh"))
-        { Margin = new Padding(0, 0, 0, 22) };
+        { Name = "PageHeader", Margin = new Padding(0, 0, 0, 22) };
         _refresh.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         _refresh.Margin = new Padding(12, 5, 0, 0);
-        main.Controls.Add(header, 0, 1);
         var warningTitle = SectionTitle("StartupPathWarningTitle");
         warningTitle.Name = "StartupPathWarningTitle";
         var warningMessage = Localized(TextLabel(""), "StartupPathMismatch");
@@ -90,7 +86,11 @@ internal sealed partial class MainForm
         _startupWarning.Name = "StartupPathWarning";
         _startupWarning.Padding = new Padding(16);
         _startupWarning.Visible = false;
-        main.Controls.Add(_startupWarning, 0, 2);
+        // Measure all fixed header content at the same width and stack it in one
+        // row. Hidden navigation or warnings must not leave stale table rows.
+        var headerArea = VerticalPanel(0, _compactNavigation, header, _startupWarning);
+        headerArea.Name = "HeaderArea";
+        main.Controls.Add(headerArea, 0, 0);
         _viewport = new FluentViewport { Dock = DockStyle.Fill, Margin = Padding.Empty, Name = "PageViewport" };
         _overviewPage = BuildOverview();
         _settingsPage = BuildSettings();
@@ -99,14 +99,14 @@ internal sealed partial class MainForm
         _settingsPage.Visible = false;
         _viewport.Controls.Add(_settingsPage);
         _viewport.Controls.Add(_overviewPage);
-        main.Controls.Add(_viewport, 0, 3);
+        main.Controls.Add(_viewport, 0, 1);
         var footer = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, Margin = new Padding(0, 14, 0, 0) };
         var quit = Localized(new FluentButton { Kind = FluentButtonKind.Subtle, Glyph = FluentGlyph.Exit, Name = "ExitButton" }, "Quit");
         quit.Click += (_, _) => Quit();
         var hide = Localized(new FluentButton { Kind = FluentButtonKind.Subtle, Glyph = FluentGlyph.Tray, Name = "HideButton" }, "Hide");
         hide.Click += (_, _) => Hide();
         footer.Controls.Add(quit); footer.Controls.Add(hide);
-        main.Controls.Add(footer, 0, 4);
+        main.Controls.Add(footer, 0, 2);
         _shell.Controls.Add(main, 1, 0);
         Controls.Add(_shell);
         _overviewNav.Click += (_, _) => SetPage(false);
@@ -119,7 +119,6 @@ internal sealed partial class MainForm
             _diagnostics.Visible = !_diagnostics.Visible;
             _detailsButton.Text = T(_diagnostics.Visible ? "HideDetails" : "ShowDetails");
         };
-        _viewport.SizeChanged += (_, _) => UpdateResponsiveLayout();
         _powerTimer.Tick += (_, _) => { if (Visible) RenderPower(); };
         _powerTimer.Start();
         _apply.Name = "ApplyModeButton"; _night.Name = "NightChargeButton"; _startup.Name = "StartupToggle";

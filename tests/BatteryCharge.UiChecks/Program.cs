@@ -88,6 +88,7 @@ internal static class Program
         Navigate(form, false);
         Assert(rapid.Text == UiText.ModeName(ChargeMode.RapidCharge), "The mode cards did not change language.");
         Directory.CreateDirectory(screenshots);
+        await CheckHeaderLayoutAsync(form, startup);
         foreach (var palette in new[] { FluentPalette.Light, FluentPalette.Dark })
         {
             form.ApplyPalette(palette);
@@ -129,6 +130,53 @@ internal static class Program
         await CheckRefreshPositionAsync(form, transport);
         await CheckNightChargeAsync(form, transport, screenshots);
         await CheckStartupWarningAsync(form, transport, startup, screenshots);
+    }
+
+    private static async Task CheckHeaderLayoutAsync(MainForm form, PreviewStartup startup)
+    {
+        var refresh = Find<Button>(form, "RefreshButton");
+        var compact = Find<FlowLayoutPanel>(form, "CompactNavigation");
+        var warning = Find<FluentSurface>(form, "StartupPathWarning");
+        var viewport = Find<Panel>(form, "PageViewport");
+        var previousSize = form.ClientSize;
+        var previousEnabled = startup.Enabled;
+        var previousPath = startup.RegisteredPath;
+        var changes = startup.Changes;
+        var scale = form.DeviceDpi / 96f;
+        try
+        {
+            foreach (var mismatch in new[] { false, true })
+            {
+                startup.SimulateTask(true, mismatch ? @"D:\Old\BatteryCharge.exe" : PreviewStartup.CurrentPath);
+                refresh.PerformClick();
+                await UntilAsync(() => refresh.Enabled);
+                foreach (var width in new[] { 1020, 819, 820, 640, 900, 640, 1020 })
+                {
+                    form.ClientSize = new Size((int)(width * scale), (int)(620 * scale));
+                    await Task.Delay(20);
+                    foreach (var settings in new[] { false, true })
+                    {
+                        Navigate(form, settings);
+                        CheckGeometry(form);
+                        Assert(compact.Visible == (form.ClientSize.Width < 820 * scale),
+                            "Resizing must select the navigation mode before measuring the header.");
+                        Assert(warning.Visible == mismatch, "Resizing must preserve the startup warning state.");
+                        Assert(viewport.Height > 0 && Find<Button>(form, "ExitButton").Visible,
+                            "Header reflow must leave room for content and footer actions.");
+                    }
+                }
+            }
+            Assert(startup.Changes == changes, "Header reflow must not change the startup task.");
+        }
+        finally
+        {
+            startup.SimulateTask(previousEnabled, previousPath);
+            form.ClientSize = previousSize;
+            Navigate(form, false);
+            refresh.PerformClick();
+            await UntilAsync(() => refresh.Enabled);
+        }
+        Console.WriteLine("PASS Header, navigation and startup warnings do not overlap across width transitions.");
     }
 
     private static async Task CheckStartupWarningAsync(MainForm form, PreviewTransport transport,
@@ -431,7 +479,9 @@ internal static class Program
         for (var first = 0; first < children.Length; first++)
         for (var second = first + 1; second < children.Length; second++)
             Assert(!children[first].Bounds.IntersectsWith(children[second].Bounds),
-                $"Sibling controls overlap: {children[first].GetType().Name} and {children[second].GetType().Name} in {parent.GetType().Name}.");
+                $"Sibling controls overlap: {children[first].Name} ({children[first].GetType().Name}) {children[first].Bounds} "
+                + $"and {children[second].Name} ({children[second].GetType().Name}) {children[second].Bounds} "
+                + $"in {parent.Name} ({parent.GetType().Name}), client size {parent.ClientSize}.");
     }
 
     private static async Task CheckSlowReadAsync(MainForm form, PreviewTransport transport, Button refresh)

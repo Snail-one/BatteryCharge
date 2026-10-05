@@ -589,6 +589,15 @@ internal sealed partial class MainForm : Form
         FitWindowToScreen();
     }
 
+    protected override void OnLayout(LayoutEventArgs e)
+    {
+        // Choose the navigation mode before laying out the shell. Changing it
+        // from the viewport's SizeChanged event re-enters a table layout pass.
+        if (_shell is not null && _modeGrid is not null)
+            UpdateResponsiveLayout();
+        base.OnLayout(e);
+    }
+
     protected override void OnDpiChanged(DpiChangedEventArgs e)
     {
         base.OnDpiChanged(e);
