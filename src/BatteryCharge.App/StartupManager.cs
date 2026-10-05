@@ -9,6 +9,7 @@ internal sealed class StartupManager : IStartupManager
     private readonly string _userSid;
     private readonly string _executablePath;
     private readonly string _taskName;
+    private string? _securityDisabledPath;
 
     internal StartupManager()
     {
@@ -25,8 +26,24 @@ internal sealed class StartupManager : IStartupManager
         object? task = FindTask(folder);
         try
         {
-            return task is null ? new StartupRegistration(false, true, _executablePath)
-                : StartupTaskDefinition.Read((string)((dynamic)task).Xml, _userSid, _executablePath, ResolveUserSid);
+            if (task is null)
+            {
+                _securityDisabledPath = null;
+                return new StartupRegistration(false, true, _executablePath);
+            }
+            var registration = StartupTaskDefinition.Read((string)((dynamic)task).Xml, _userSid, _executablePath, ResolveUserSid);
+            // Check ownership before applying the migration policy. It must never
+            // disable a foreign task, or leave an old writable target active.
+            var result = StartupRegistrationPolicy.Enforce(registration, path =>
+            {
+                using var pathLease = StartupPathSecurity.Acquire(path);
+            }, () => ((dynamic)task).Enabled = false);
+            if (result.SecurityError is not null)
+                _securityDisabledPath = result.RegisteredExecutablePath;
+            else if (result.Enabled || !string.Equals(result.RegisteredExecutablePath, _securityDisabledPath, StringComparison.OrdinalIgnoreCase))
+                _securityDisabledPath = null;
+            return _securityDisabledPath is null ? result
+                : result with { SecurityError = UiText.Get("UnsafeStartupDisabled") };
         }
         finally
         {
@@ -50,6 +67,7 @@ internal sealed class StartupManager : IStartupManager
 
                 if (enabled)
                 {
+                    using var pathLease = StartupPathSecurity.Acquire(_executablePath);
                     // TASK_CREATE_OR_UPDATE = 6; TASK_LOGON_INTERACTIVE_TOKEN = 3.
                     // No password is stored. Registering a logon trigger does not start the app now.
                     object registered = folder.RegisterTask(_taskName,
@@ -60,6 +78,7 @@ internal sealed class StartupManager : IStartupManager
                 {
                     folder.DeleteTask(_taskName, 0);
                 }
+                _securityDisabledPath = null;
                 return true;
             }
             finally

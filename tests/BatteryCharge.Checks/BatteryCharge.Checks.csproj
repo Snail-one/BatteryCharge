@@ -9,6 +9,10 @@
     <Compile Include="../../src/BatteryCharge.App/StartupTaskLookup.cs" Link="StartupTaskLookup.cs" />
     <Compile Include="../../src/BatteryCharge.App/LanguagePreferences.cs" Link="LanguagePreferences.cs" />
     <Compile Include="../../src/BatteryCharge.App/CleanupService.cs" Link="CleanupService.cs" />
+    <Compile Include="../../src/BatteryCharge.App/SafeDirectory.cs" Link="SafeDirectory.cs" />
+    <Compile Include="../../src/BatteryCharge.App/StartupPathSecurity.cs" Link="StartupPathSecurity.cs" />
+    <Compile Include="../../src/BatteryCharge.App/StartupRegistrationPolicy.cs" Link="StartupRegistrationPolicy.cs" />
+    <Compile Include="../../src/BatteryCharge.App/SingleInstance.cs" Link="SingleInstance.cs" />
     <Compile Include="../../src/BatteryCharge.App/WindowBounds.cs" Link="WindowBounds.cs" />
     <Compile Include="../../src/BatteryCharge.App/FluentPalette.cs" Link="FluentPalette.cs" />
   </ItemGroup>

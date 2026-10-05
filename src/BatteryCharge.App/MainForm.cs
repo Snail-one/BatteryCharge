@@ -326,14 +326,16 @@ internal sealed partial class MainForm : Form
         _startupItem.Checked = enabled;
         _startupItem.Text = T("StartupToggle");
         var pathMismatch = !registration.UsesCurrentPath;
-        SetStartupInfo(pathMismatch
-            ? T(enabled ? "StartupMoved" : "StartupPathMismatch") : T(enabled ? "StartupOn" : "StartupOff"),
-            error: pathMismatch);
+        var securityProblem = registration.SecurityError is not null;
+        SetStartupInfo(registration.SecurityError ?? (pathMismatch
+            ? T(enabled ? "StartupMoved" : "StartupPathMismatch") : T(enabled ? "StartupOn" : "StartupOff")),
+            error: pathMismatch || securityProblem);
         using var scroll = _viewport.PreserveScroll();
         using var layout = new FluentLayoutBatch(_shell);
+        _startupWarningMessage.Text = registration.SecurityError ?? T("StartupPathMismatch");
         _startupPaths.Text = T("StartupCurrentPath", registration.CurrentExecutablePath ?? Environment.ProcessPath)
             + Environment.NewLine + T("StartupRegisteredPath", registration.RegisteredExecutablePath ?? T("StartupPathNotConfigured"));
-        _startupWarning.Visible = pathMismatch;
+        _startupWarning.Visible = pathMismatch || securityProblem;
     }
 
     private async Task ToggleStartupAsync()

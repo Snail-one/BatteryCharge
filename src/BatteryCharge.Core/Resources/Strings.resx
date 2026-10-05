@@ -109,7 +109,7 @@
     <value>已开启，但程序位置已变化；请关闭后重新开启以更新路径。</value>
   </data>
   <data xml:space="preserve" name="StartupPathWarningTitle">
-    <value>自动启动路径不一致</value>
+    <value>自动启动需要处理</value>
   </data>
   <data xml:space="preserve" name="StartupPathMismatch">
     <value>计划任务中的启动路径与当前运行程序不一致，请在应用设置中重新配置自动启动。</value>
@@ -380,5 +380,23 @@
   </data>
   <data name="TrayBehaviorHint" xml:space="preserve">
     <value>关闭或最小化窗口会收起到系统托盘。再次打开程序即可恢复窗口；使用“退出”结束运行。</value>
+  </data>
+  <data name="UnsafeDirectory" xml:space="preserve">
+    <value>无法安全访问目录：{0}。请使用本地真实目录，移除目录链接，并确认目录未被其他程序替换或占用。</value>
+  </data>
+  <data name="UnsafeStartupPath" xml:space="preserve">
+    <value>无法安全启用最高权限自动启动：{0}。请将程序放到仅管理员可修改的本地目录（例如 Program Files 下的专用目录），再重新开启。</value>
+  </data>
+  <data name="UnsafeStartupDisabled" xml:space="preserve">
+    <value>已关闭不安全的自动启动配置：程序路径不可访问或可被普通权限进程修改。请移至权限受保护的本地目录后重新开启。</value>
+  </data>
+  <data name="DriverOperationTimedOut" xml:space="preserve">
+    <value>驱动操作超时。本次运行已停止后续驱动读写，以避免命令交错。请退出程序，检查驱动后重新启动。</value>
+  </data>
+  <data name="InstanceUnavailable" xml:space="preserve">
+    <value>无法建立安全的单实例通信。请确认程序以管理员身份运行，并检查系统权限。</value>
+  </data>
+  <data name="DifferentInstance" xml:space="preserve">
+    <value>程序已从其他位置或在其他会话中运行。请先退出已有实例，再从此位置启动，以检查和更新自动启动路径。</value>
   </data>
 </root>

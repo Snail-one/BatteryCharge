@@ -28,6 +28,7 @@ internal static class CleanupService
         {
             if (!Directory.Exists(directory))
                 return;
+            using var lease = SafeDirectory.Acquire(directory);
             File.Delete(settingsPath);
             foreach (var temporary in Directory.EnumerateFiles(directory, ".settings-*.tmp", SearchOption.TopDirectoryOnly))
             {
@@ -37,8 +38,8 @@ internal static class CleanupService
                     File.Delete(temporary);
             }
             // Never delete the executable folder or recursively remove unrelated files.
-            if (removeEmptyDirectory && !Directory.EnumerateFileSystemEntries(directory).Any())
-                Directory.Delete(directory, recursive: false);
+            if (removeEmptyDirectory)
+                lease.RemoveIfEmpty();
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {

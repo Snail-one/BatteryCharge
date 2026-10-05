@@ -260,6 +260,29 @@ internal static class Program
         Assert(!warning.Visible && startup.RegisteredPath == PreviewStartup.CurrentPath,
             "Turning startup off and on must register the current executable path.");
         Assert(transport.Writes.Count == writes, "Startup path checks must not write to the device.");
+        startup.SimulateTask(false, PreviewStartup.CurrentPath);
+        startup.UnsafeDisabled = true;
+        foreach (var languageIndex in new[] { 0, 1 })
+        {
+            language.SelectedIndex = languageIndex;
+            await UntilAsync(() => language.Enabled && refresh.Enabled);
+            refresh.PerformClick();
+            await UntilAsync(() => refresh.Enabled);
+            foreach (var settings in new[] { false, true })
+            {
+                Navigate(form, settings);
+                Assert(warning.Visible && !toggle.Checked
+                    && Find<Label>(form, "StartupWarningMessage").Text == UiText.Get("UnsafeStartupDisabled"),
+                    "A disabled unsafe target must retain a prominent localized warning even when its path matches.");
+                CheckGeometry(form);
+            }
+            Navigate(form, false);
+            Capture(form, Path.Combine(screenshots, $"startup-security-{UiText.Language}.png"));
+        }
+        startup.SimulateTask(true, PreviewStartup.CurrentPath);
+        refresh.PerformClick();
+        await UntilAsync(() => refresh.Enabled);
+        Assert(!warning.Visible && transport.Writes.Count == writes, "Resolving the security warning must not write to the device.");
         Console.WriteLine("PASS Startup path warnings stay prominent on both pages and clear after reconfiguration.");
     }
 
@@ -682,10 +705,11 @@ internal sealed class PreviewStartup : IStartupManager
     internal bool Enabled { get; private set; }
     internal int Changes { get; private set; }
     internal string? RegisteredPath { get; private set; }
+    internal bool UnsafeDisabled { get; set; }
     public StartupRegistration Read() => new(Enabled, RegisteredPath is null || RegisteredPath == CurrentPath,
-        CurrentPath, RegisteredPath);
-    internal void SimulateTask(bool enabled, string? path) { Enabled = enabled; RegisteredPath = path; }
-    public void SetEnabled(bool enabled) { Enabled = enabled; RegisteredPath = enabled ? CurrentPath : null; Changes++; }
+        CurrentPath, RegisteredPath, UnsafeDisabled ? UiText.Get("UnsafeStartupDisabled") : null);
+    internal void SimulateTask(bool enabled, string? path) { Enabled = enabled; RegisteredPath = path; UnsafeDisabled = false; }
+    public void SetEnabled(bool enabled) { Enabled = enabled; RegisteredPath = enabled ? CurrentPath : null; UnsafeDisabled = false; Changes++; }
     public void RemoveForCleanup() => SetEnabled(false);
 }
 

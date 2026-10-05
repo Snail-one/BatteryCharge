@@ -7,6 +7,19 @@ using System.Runtime.InteropServices;
 using System.Collections;
 using System.Resources;
 using System.Text.RegularExpressions;
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
+using System.Security.Principal;
+
+if (OperatingSystem.IsWindows() && Environment.GetCommandLineArgs().Contains("--instance-probe"))
+{
+    var arguments = Environment.GetCommandLineArgs();
+    var namespaceName = arguments[Array.IndexOf(arguments, "--instance-probe") + 1];
+    using var instance = new SingleInstance(namespaceName);
+    Console.WriteLine($"INSTANCE {instance.IsFirst}|{instance.CanActivate}");
+    if (instance.CanActivate) instance.ShowWindow.Set();
+    return 0;
+}
 
 // Dependency-free behavioral checks: no device access, test SDK, or test packages.
 var checks = new (string Name, Func<Task> Run)[]
@@ -24,6 +37,8 @@ var checks = new (string Name, Func<Task> Run)[]
     ("Driver write failure stops the sequence", FailedWriteStopsSequence),
     ("Invalid enum never accesses the device", InvalidModeDoesNotTouchDevice),
     ("Concurrent requests cannot split a mode sequence", ConcurrentRequestsAreSerialized),
+    ("Timed-out native work keeps its gate and rejects subsequent writes", DriverTimeoutIsolation),
+    ("A late driver completion cannot continue a timed-out write sequence", DriverTimeoutStopsLateSequence),
     ("Startup task preserves executable paths and interactive battery operation", StartupTaskConfiguration),
     ("Startup accepts account names that resolve to the current user's SID", StartupAccountNames),
     ("Startup rejects foreign, unresolved and missing account identities", StartupAccountProtection),
@@ -32,16 +47,25 @@ var checks = new (string Name, Func<Task> Run)[]
     ("Foreign tasks and other users cannot be modified", ForeignStartupTask),
     ("Missing startup tasks handle COM and mapped file-not-found exceptions", MissingStartupTask),
     ("Startup lookup preserves existing tasks and propagates scheduler failures", StartupLookupFailures),
+    ("Unsafe startup targets are disabled without losing paths or hiding failures", StartupSafetyMigration),
     ("Language choice is saved and survives restart", LanguagePreferenceRoundTrip),
     ("Missing, damaged and unsupported language settings fall back safely", LanguagePreferenceFallback),
+    ("Oversized preferences fall back without reading the whole file", OversizedLanguagePreferences),
     ("UI and driver errors switch languages independently of thread culture", LanguageResources),
     ("Cleanup removes only app settings and recognized temporary files", CleanupPreservesOtherFiles),
     ("Startup removal failure preserves configuration for retry", CleanupTaskFailure),
     ("Configuration deletion failure is reported and preserves remaining files", CleanupFileFailure),
+    ("Directory links cannot redirect settings writes or cleanup", DirectoryLinkProtection),
     ("Window bounds fit small screens, scaled displays and disconnected monitors", AdaptiveWindowBounds),
     ("Fluent UI resources have matching keys and format arguments in both languages", FluentResourceCoverage),
     ("Light and dark palettes keep body text readable on their surfaces", FluentPaletteContrast)
 };
+
+if (OperatingSystem.IsWindows())
+    checks = [.. checks,
+        ("Windows directory leases prevent parent replacement and release cleanly", WindowsDirectoryLease),
+        ("Startup ACL policy rejects writable targets and untrusted owners", WindowsStartupAcl),
+        ("Private instance objects ignore public mutex precreation and retain activation", WindowsPrivateInstance)];
 
 var failures = 0;
 foreach (var check in checks)
@@ -70,6 +94,233 @@ return failures == 0 ? 0 : 1;
 
 static ChargeController Controller(FakeTransport transport, int attempts = 3) =>
     new(transport, attempts, TimeSpan.Zero);
+
+static async Task StartupSafetyMigration()
+{
+    var registration = new StartupRegistration(true, false, @"C:\Protected\BatteryCharge.exe", @"C:\Writable\BatteryCharge.exe");
+    var disables = 0;
+    var result = StartupRegistrationPolicy.Enforce(registration, path =>
+    {
+        Assert(path == registration.RegisteredExecutablePath, "The registered target must be validated, not just the running executable.");
+        throw new IOException("Untrusted path");
+    }, () => disables++);
+    Assert(disables == 1 && !result.Enabled && !result.UsesCurrentPath && result.SecurityError is not null
+        && result.RegisteredExecutablePath == registration.RegisteredExecutablePath, "Unsafe startup migration lost its warning or path.");
+    Assert(StartupRegistrationPolicy.Enforce(registration, _ => { }, () => disables++) == registration && disables == 1,
+        "A protected target must not be disabled.");
+    var disabled = registration with { Enabled = false };
+    Assert(StartupRegistrationPolicy.Enforce(disabled, _ => throw new Exception("Must not validate"),
+        () => throw new Exception("Must not disable")) == disabled, "An already disabled task was modified.");
+    await Throws<UnauthorizedAccessException>(() =>
+    {
+        StartupRegistrationPolicy.Enforce(registration, _ => throw new IOException("Unsafe"),
+            () => throw new UnauthorizedAccessException("Scheduler denied disabling"));
+        return Task.CompletedTask;
+    });
+}
+
+static async Task DriverTimeoutIsolation()
+{
+    using var transport = new BlockingTransport();
+    var controller = new ChargeController(transport, operationTimeout: TimeSpan.FromMilliseconds(200));
+    var read = controller.ReadAsync();
+    try
+    {
+        Assert(await Task.Run(() => transport.Entered.Wait(TimeSpan.FromSeconds(3))), "The native worker did not enter.");
+        var queuedWrite = controller.SetModeAsync(ChargeMode.RapidCharge);
+        await Throws<IOException>(() => read.WaitAsync(TimeSpan.FromSeconds(3)));
+        await Throws<IOException>(() => queuedWrite.WaitAsync(TimeSpan.FromSeconds(3)));
+        await Throws<IOException>(() => controller.SetNightChargeAsync(true));
+        Assert(transport.Writes == 0, "A timed-out driver allowed another write while its call was pending.");
+    }
+    finally
+    {
+        transport.Release.Set();
+        Assert(await Task.Run(() => transport.Completed.Wait(TimeSpan.FromSeconds(3))), "The test worker failed to finish.");
+    }
+    await Throws<IOException>(() => controller.SetModeAsync(ChargeMode.Normal));
+    Assert(transport.Writes == 0, "A late driver completion must not silently re-enable writes.");
+}
+
+static async Task DriverTimeoutStopsLateSequence()
+{
+    using var transport = new BlockingTransport { BlockWrites = true };
+    var controller = new ChargeController(transport, operationTimeout: TimeSpan.FromMilliseconds(200));
+    var write = controller.SetModeAsync(ChargeMode.RapidCharge);
+    try
+    {
+        Assert(await Task.Run(() => transport.Entered.Wait(TimeSpan.FromSeconds(3))), "The first command did not enter the driver.");
+        await Throws<IOException>(() => write.WaitAsync(TimeSpan.FromSeconds(3)));
+        Assert(transport.Writes == 1, "Only the already pending first command may have been sent.");
+    }
+    finally { transport.Release.Set(); }
+    Assert(await Task.Run(() => transport.Completed.Wait(TimeSpan.FromSeconds(3))), "The late native call did not finish.");
+    await Task.Delay(100); // Allow the native worker to unwind after returning from the first command.
+    Assert(transport.Writes == 1, "The worker sent the rest of the sequence after the UI reported a timeout.");
+    await Throws<IOException>(() => controller.SetModeAsync(ChargeMode.Normal));
+}
+
+static Task OversizedLanguagePreferences()
+{
+    var directory = Path.Combine(Path.GetTempPath(), $"BatteryCharge-large-{Guid.NewGuid():N}");
+    Directory.CreateDirectory(directory);
+    var path = Path.Combine(directory, "settings.json");
+    try
+    {
+        File.WriteAllText(path, "{\"language\":\"en-US\",\"padding\":\"" + new string('x', 1024 * 1024) + "\"}");
+        // Warm up parsing and measure only the bounded oversized read.
+        LanguagePreferences.Load(path, CultureInfo.GetCultureInfo("zh-CN"));
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        Assert(LanguagePreferences.Load(path, CultureInfo.GetCultureInfo("zh-CN")) == "zh-CN", "Oversized JSON was accepted.");
+        Assert(GC.GetAllocatedBytesForCurrentThread() - before < 256 * 1024, "Oversized settings still caused an unbounded allocation.");
+        File.WriteAllBytes(path, [0xef, 0xbb, 0xbf, .. System.Text.Encoding.UTF8.GetBytes("{\"language\":\"en-US\"}")]);
+        Assert(LanguagePreferences.Load(path, CultureInfo.GetCultureInfo("zh-CN")) == "en-US", "UTF-8 BOM compatibility was lost.");
+        File.WriteAllText(path, "{\"language\":\"en-US\"}", System.Text.Encoding.Unicode);
+        Assert(LanguagePreferences.Load(path, CultureInfo.GetCultureInfo("zh-CN")) == "en-US", "UTF-16 BOM compatibility was lost.");
+    }
+    finally { Directory.Delete(directory, recursive: true); }
+    return Task.CompletedTask;
+}
+
+static async Task DirectoryLinkProtection()
+{
+    var directory = Path.Combine(Path.GetTempPath(), $"BatteryCharge-links-{Guid.NewGuid():N}");
+    var outside = Path.Combine(directory, "target");
+    var link = Path.Combine(directory, "alias");
+    Directory.CreateDirectory(outside);
+    var settings = Path.Combine(outside, "settings.json");
+    var temporary = Path.Combine(outside, $".settings-{Guid.NewGuid():N}.tmp");
+    const string sentinel = "{\"language\":\"en-US\"}";
+    File.WriteAllText(settings, sentinel);
+    File.WriteAllText(temporary, "untouched");
+    try
+    {
+        Directory.CreateSymbolicLink(link, outside);
+        Assert(LanguagePreferences.Load(Path.Combine(link, "settings.json"), CultureInfo.GetCultureInfo("zh-CN")) == "zh-CN",
+            "Configuration reads must not follow a directory alias.");
+        await Throws<IOException>(() =>
+        {
+            LanguagePreferences.Save(Path.Combine(link, "new", "settings.json"), "en-US");
+            return Task.CompletedTask;
+        });
+        Assert(!Directory.Exists(Path.Combine(outside, "new")), "Saving created a directory through a linked ancestor.");
+        await Throws<IOException>(() =>
+        {
+            CleanupService.Run(() => { }, Path.Combine(directory, "absent", "settings.json"), Path.Combine(link, "settings.json"));
+            return Task.CompletedTask;
+        });
+        Assert(File.ReadAllText(settings) == sentinel && File.Exists(temporary), "Cleanup crossed a directory link.");
+    }
+    finally
+    {
+        if (Directory.Exists(link)) Directory.Delete(link);
+        Directory.Delete(directory, recursive: true);
+    }
+}
+
+[SupportedOSPlatform("windows")]
+static async Task WindowsDirectoryLease()
+{
+    if (!OperatingSystem.IsWindows()) return;
+    var directory = Path.Combine(Path.GetTempPath(), $"BatteryCharge-pinned-{Guid.NewGuid():N}");
+    var parent = Path.Combine(directory, "parent");
+    var leaf = Path.Combine(parent, "leaf");
+    Directory.CreateDirectory(leaf);
+    try
+    {
+        using (SafeDirectory.Acquire(leaf))
+        {
+            await Throws<IOException>(() => { Directory.Move(parent, parent + "-moved"); return Task.CompletedTask; });
+            Assert(WindowsDirectoryProbe.TryWrite(leaf) == 32,
+                "A checked directory must deny write handles that could modify its reparse data.");
+            // Child operations must remain possible while its ancestors are pinned.
+            LanguagePreferences.Save(Path.Combine(leaf, "settings.json"), "en-US");
+        }
+        Assert(WindowsDirectoryProbe.TryWrite(leaf) == 0, "Directory write sharing was not restored after disposal.");
+        Directory.Move(parent, parent + "-moved");
+        Assert(Directory.Exists(parent + "-moved"), "Directory handles leaked after the lease ended.");
+    }
+    finally { Directory.Delete(directory, recursive: true); }
+}
+
+[SupportedOSPlatform("windows")]
+static Task WindowsStartupAcl()
+{
+    if (!OperatingSystem.IsWindows()) return Task.CompletedTask;
+    static DirectorySecurity Security(string sddl)
+    {
+        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
+        var result = new DirectorySecurity();
+        result.SetSecurityDescriptorSddlForm(sddl);
+        return result;
+    }
+    var protectedAcl = Security("O:BAG:BAD:P(A;;FA;;;BA)(A;;FR;;;BU)");
+    Assert(StartupPathSecurity.IsProtected(protectedAcl, false), "An administrator-owned read-only target was rejected.");
+    Assert(!StartupPathSecurity.IsProtected(Security("O:BAG:BAD:P(A;;FA;;;BA)(A;;FW;;;BU)"), false), "User write permission was accepted.");
+    Assert(!StartupPathSecurity.IsProtected(Security("O:BAG:BAD:P(A;;GW;;;BU)"), false), "An unmapped generic write ACE was accepted.");
+    Assert(!StartupPathSecurity.IsProtected(Security("O:BAG:BAD:P(A;;GA;;;BU)"), true), "An unmapped generic all ACE was accepted on an ancestor.");
+    Assert(!StartupPathSecurity.IsProtected(Security("O:BUG:BAD:P(A;;FR;;;BU)"), false), "An untrusted owner was accepted.");
+    Assert(!StartupPathSecurity.IsProtected(Security("O:BAG:BAD:NO_ACCESS_CONTROL"), false), "An unrestricted DACL was accepted.");
+    Assert(!StartupPathSecurity.IsProtected(Security("O:BAG:BAD:P(A;;DC;;;BU)"), true), "An ancestor allowing deletion of children was accepted.");
+    Assert(StartupPathSecurity.IsProtected(Security("O:BAG:BAD:P(A;;AD;;;BU)"), true), "Creating unrelated sibling directories must not reject a protected child.");
+    return Task.CompletedTask;
+}
+
+[SupportedOSPlatform("windows")]
+static Task WindowsPrivateInstance()
+{
+    if (!OperatingSystem.IsWindows()) return Task.CompletedTask;
+    using var identity = WindowsIdentity.GetCurrent();
+    if (!new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))
+    {
+        if (Environment.GetEnvironmentVariable("CI") == "true")
+            throw new InvalidOperationException("Windows CI must run elevated instance security checks.");
+        Console.WriteLine("SKIP Private namespace checks require an elevated Windows console.");
+        return Task.CompletedTask;
+    }
+    var namespaceName = $"BatteryChargeSecurityChecks.{Guid.NewGuid():N}";
+    using var publicMutex = new Mutex(false, $"Global\\{namespaceName}");
+    using (var first = new SingleInstance(namespaceName))
+    {
+        Assert(first.IsFirst, "A public precreated mutex blocked the private namespace.");
+        var start = new System.Diagnostics.ProcessStartInfo(Environment.ProcessPath!)
+        { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        if (Path.GetFileNameWithoutExtension(Environment.ProcessPath) == "dotnet")
+            start.ArgumentList.Add(System.Reflection.Assembly.GetExecutingAssembly().Location);
+        start.ArgumentList.Add("--instance-probe");
+        start.ArgumentList.Add(namespaceName);
+        using var second = System.Diagnostics.Process.Start(start)!;
+        Assert(second.WaitForExit(10000), "The second secure process did not exit.");
+        var output = second.StandardOutput.ReadToEnd();
+        Assert(second.ExitCode == 0 && output.Contains("INSTANCE False|True"),
+            "The second process did not recognize the protected instance: " + output + second.StandardError.ReadToEnd());
+        Assert(first.ShowWindow.WaitOne(TimeSpan.FromSeconds(2)), "The secure activation event was not shared.");
+        if (!string.Equals(Path.GetFileNameWithoutExtension(Environment.ProcessPath), "dotnet", StringComparison.OrdinalIgnoreCase))
+        {
+            var copy = Path.Combine(Path.GetTempPath(), $"BatteryCharge-instance-{Guid.NewGuid():N}");
+            Directory.CreateDirectory(copy);
+            try
+            {
+                var source = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location)!;
+                foreach (var file in Directory.EnumerateFiles(source))
+                    File.Copy(file, Path.Combine(copy, Path.GetFileName(file)));
+                var alternate = new System.Diagnostics.ProcessStartInfo(Path.Combine(copy, Path.GetFileName(Environment.ProcessPath!)))
+                { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+                alternate.ArgumentList.Add("--instance-probe");
+                alternate.ArgumentList.Add(namespaceName);
+                using var relocated = System.Diagnostics.Process.Start(alternate)!;
+                Assert(relocated.WaitForExit(10000), "The relocated instance did not exit.");
+                var relocatedOutput = relocated.StandardOutput.ReadToEnd();
+                Assert(relocated.ExitCode == 0 && relocatedOutput.Contains("INSTANCE False|False"),
+                    "A relocated executable silently activated the old location: " + relocatedOutput + relocated.StandardError.ReadToEnd());
+            }
+            finally { Directory.Delete(copy, recursive: true); }
+        }
+    }
+    using var restarted = new SingleInstance(namespaceName);
+    Assert(restarted.IsFirst, "Closing the namespace left an unusable startup lock.");
+    return Task.CompletedTask;
+}
 
 static Task AdaptiveWindowBounds()
 {
@@ -657,6 +908,53 @@ static async Task CleanupFileFailure()
     {
         if (Directory.Exists(directory))
             Directory.Delete(directory, recursive: true);
+    }
+}
+
+[SupportedOSPlatform("windows")]
+static class WindowsDirectoryProbe
+{
+    internal static int TryWrite(string directory)
+    {
+        using var handle = CreateFileW(directory, 0x40000000, 3, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero);
+        return handle.IsInvalid ? Marshal.GetLastWin32Error() : 0;
+    }
+
+    [DllImport("kernel32.dll", ExactSpelling = true, CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern Microsoft.Win32.SafeHandles.SafeFileHandle CreateFileW(string path, uint access,
+        uint share, IntPtr attributes, uint disposition, uint flags, IntPtr template);
+}
+
+sealed class BlockingTransport : IEnergyTransport, IDisposable
+{
+    internal ManualResetEventSlim Entered { get; } = new();
+    internal ManualResetEventSlim Release { get; } = new();
+    internal ManualResetEventSlim Completed { get; } = new();
+    internal int Writes;
+    internal bool BlockWrites { get; init; }
+    public uint Query(uint code, uint input)
+    {
+        if (BlockWrites) return code == ChargeProtocol.NightControlCode ? 1u : 0u;
+        Entered.Set();
+        Release.Wait();
+        Completed.Set();
+        return code == ChargeProtocol.NightControlCode ? 1u : 0u;
+    }
+    public void Send(uint code, uint input)
+    {
+        Interlocked.Increment(ref Writes);
+        if (BlockWrites)
+        {
+            Entered.Set();
+            Release.Wait();
+            Completed.Set();
+        }
+    }
+    public void Dispose()
+    {
+        // The worker may be finishing its final query after Completed is signaled.
+        // These lightweight test signals intentionally remain valid until process exit.
+        Release.Set();
     }
 }
 

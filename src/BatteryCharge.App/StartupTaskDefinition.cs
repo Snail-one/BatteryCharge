@@ -4,7 +4,7 @@ using BatteryCharge.Core;
 namespace BatteryCharge.App;
 
 internal sealed record StartupRegistration(bool Enabled, bool UsesCurrentPath,
-    string? CurrentExecutablePath = null, string? RegisteredExecutablePath = null);
+    string? CurrentExecutablePath = null, string? RegisteredExecutablePath = null, string? SecurityError = null);
 
 internal static class StartupTaskDefinition
 {

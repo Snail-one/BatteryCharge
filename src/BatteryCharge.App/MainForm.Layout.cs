@@ -28,6 +28,7 @@ internal sealed partial class MainForm
     private FlowLayoutPanel _compactNavigation = null!;
     private FluentSurface _diagnostics = null!;
     private FluentSurface _startupWarning = null!;
+    private Label _startupWarningMessage = null!;
     private ChargeMode _selectedMode = ChargeMode.Normal;
     private bool _settingsVisible;
     private bool _updatingResponsiveLayout;
@@ -73,7 +74,8 @@ internal sealed partial class MainForm
         _refresh.Margin = new Padding(12, 5, 0, 0);
         var warningTitle = SectionTitle("StartupPathWarningTitle");
         warningTitle.Name = "StartupPathWarningTitle";
-        var warningMessage = Localized(TextLabel(""), "StartupPathMismatch");
+        var warningMessage = _startupWarningMessage = TextLabel(T("StartupPathMismatch"));
+        warningMessage.Name = "StartupWarningMessage";
         var reviewStartup = Localized(new FluentButton
         { Kind = FluentButtonKind.Standard, Glyph = FluentGlyph.Settings, Name = "ReviewStartupButton" }, "StartupReview");
         reviewStartup.Click += (_, _) =>

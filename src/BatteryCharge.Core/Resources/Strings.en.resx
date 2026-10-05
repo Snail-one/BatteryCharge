@@ -109,7 +109,7 @@
     <value>Enabled, but the app has moved. Turn startup off and on again to update its path.</value>
   </data>
   <data xml:space="preserve" name="StartupPathWarningTitle">
-    <value>Startup path mismatch</value>
+    <value>Startup needs attention</value>
   </data>
   <data xml:space="preserve" name="StartupPathMismatch">
     <value>The scheduled startup path differs from the running app. Reconfigure startup in app settings.</value>
@@ -380,5 +380,23 @@ Cleanup is incomplete. The app will remain open. Resolve the issue and try again
   </data>
   <data name="TrayBehaviorHint" xml:space="preserve">
     <value>Closing or minimizing hides the window to the system tray. Open the app again to restore it, or use Exit to quit.</value>
+  </data>
+  <data name="UnsafeDirectory" xml:space="preserve">
+    <value>Cannot safely access directory: {0}. Use a local directory without directory links and check that another process has not replaced or locked it.</value>
+  </data>
+  <data name="UnsafeStartupPath" xml:space="preserve">
+    <value>Cannot safely enable elevated startup: {0}. Move the application to a local directory writable only by administrators, such as a dedicated directory under Program Files, then enable startup again.</value>
+  </data>
+  <data name="UnsafeStartupDisabled" xml:space="preserve">
+    <value>Unsafe startup registration was disabled: its executable path is unavailable or writable by an unelevated process. Move the application to a protected local directory, then enable startup again.</value>
+  </data>
+  <data name="DriverOperationTimedOut" xml:space="preserve">
+    <value>The driver operation timed out. Further driver access is disabled for this run to prevent overlapping commands. Exit the application, check the driver, then restart.</value>
+  </data>
+  <data name="InstanceUnavailable" xml:space="preserve">
+    <value>Could not establish secure single-instance communication. Run the application as administrator and check system permissions.</value>
+  </data>
+  <data name="DifferentInstance" xml:space="preserve">
+    <value>The application is already running from another location or in another session. Exit that instance, then launch from this location to check and update the startup path.</value>
   </data>
 </root>
