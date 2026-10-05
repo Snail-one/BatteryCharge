@@ -161,7 +161,7 @@ git tag v1.0.1
 git push origin v1.0.1
 ```
 
-Release Notes 使用 GitHub 的 `--generate-notes` 自动生成，包含版本间合并的 Pull Request、贡献者和完整变更链接；没有合并 PR 的直接提交可通过完整变更链接查看。工作流使用内置 `GITHUB_TOKEN`，仅 Windows 发布作业申请 `contents: write`，无需配置个人令牌。说明见 [GitHub 自动生成 Release Notes](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes)。
+Release Notes 采用组合生成：`scripts/release-notes.py` 用 `git log` 列出上一个主线祖先 tag 到当前 tag 之间的主线非合并提交，包含提交标题、作者和提交链接，覆盖个人直推变更；首次发布列出当前版本的全部主线非合并提交。再通过 `--notes-file` 配合 GitHub 的 `--generate-notes` 补充 Pull Request、贡献者和 Full Changelog 链接，两部分采用相同的起始 tag。工作流拉取完整历史与 tags，使用内置 `GITHUB_TOKEN`，仅 Windows 发布作业申请 `contents: write`，无需配置个人令牌。说明见 [GitHub 自动生成 Release Notes](https://docs.github.com/en/repositories/releasing-projects-on-github/automatically-generated-release-notes) 和 [GitHub CLI 发布命令](https://cli.github.com/manual/gh_release_create)。
 
 `.github/dependabot.yml` 配置 Dependabot 每周一检查 GitHub Actions、`global.json` 中的 .NET SDK 和四个项目的 NuGet 依赖，发现更新时自动创建 PR。Actions 和 NuGet 更新分别合并为一组，SDK 不跨主版本升级，保持 .NET 10。当前没有第三方 NuGet 包，该配置也覆盖后续加入的包。Dependabot PR 不触发上述构建，也不会自动合并；配置进入 GitHub 默认分支后生效。配置选项见 [GitHub Dependabot 文档](https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference)。
 

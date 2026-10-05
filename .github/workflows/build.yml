@@ -26,6 +26,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - name: Resolve version from tag
         id: release
         shell: pwsh
@@ -68,10 +70,17 @@ jobs:
           name: BatteryCharge-Windows-x64-${{ steps.release.outputs.version }}
           path: artifacts/BatteryCharge-Windows-x64-${{ steps.release.outputs.version }}.zip
           if-no-files-found: error
+      - name: Generate commit notes
+        id: changes
+        shell: pwsh
+        run: |
+          python scripts/release-notes.py --tag "$env:GITHUB_REF_NAME" --repository "$env:GITHUB_REPOSITORY" --output artifacts/commit-notes.md
+          if ($LASTEXITCODE -ne 0) { throw "Commit notes generation failed ($LASTEXITCODE)." }
       - name: Publish GitHub Release with generated notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
+          PREVIOUS_TAG: ${{ steps.changes.outputs.previous_tag }}
         shell: pwsh
         run: |
           $package = "artifacts/BatteryCharge-Windows-x64-$env:RELEASE_VERSION.zip"
@@ -81,7 +90,9 @@ jobs:
           } else {
             $releaseArgs = @('release', 'create', $env:GITHUB_REF_NAME, $package,
               '--repo', $env:GITHUB_REPOSITORY, '--verify-tag',
-              '--title', "BatteryCharge $env:RELEASE_VERSION", '--generate-notes')
+              '--title', "BatteryCharge $env:RELEASE_VERSION", '--generate-notes',
+              '--notes-file', 'artifacts/commit-notes.md')
+            if ($env:PREVIOUS_TAG) { $releaseArgs += @('--notes-start-tag', $env:PREVIOUS_TAG) }
             if ($env:RELEASE_VERSION -match '^\d+\.\d+\.\d+-') { $releaseArgs += '--prerelease' }
             gh @releaseArgs
           }
