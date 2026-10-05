@@ -8,6 +8,10 @@ internal sealed class MainForm : Form
     private readonly ComboBox _modePicker = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 235 };
     private readonly Button _apply = new() { Text = "应用充电模式", AutoSize = true };
     private readonly CheckBox _night = new() { Text = "开启夜间充电", AutoSize = true, AutoCheck = false };
+    private readonly CheckBox _startup = new() { Text = "开机自动启动", AutoSize = true, AutoCheck = false };
+    private readonly Label _startupInfo = TextLabel("正在读取自动启动设置…");
+    private readonly StartupManager _startupManager = new();
+    private readonly ChargeIcons _icons = new();
     private readonly Button _refresh = new() { Text = "刷新状态", AutoSize = true };
     private readonly Label _modeState = TextLabel("正在检测…");
     private readonly Label _nightState = TextLabel("正在检测…");
@@ -26,33 +30,36 @@ internal sealed class MainForm : Form
     private readonly ContextMenuStrip _trayMenu = new();
     private readonly Dictionary<ChargeMode, ToolStripMenuItem> _modeItems = [];
     private readonly ToolStripMenuItem _nightItem = new("开启夜间充电");
+    private readonly ToolStripMenuItem _startupItem = new("开机自动启动");
     private readonly ToolStripMenuItem _refreshItem = new("刷新状态");
     private readonly ToolStripMenuItem _quitItem = new("退出");
     private readonly NotifyIcon _tray;
-    private readonly Icon _applicationIcon = LoadApplicationIcon();
-    private readonly Icon _trayIcon;
     private ChargeSnapshot? _snapshot;
+    private bool? _startupEnabled;
+    private bool _startupBusy;
+    private bool _startInTray;
+    private bool _initialized;
     private bool _busy;
     private bool _quitting;
 
-    public MainForm(ChargeController controller)
+    public MainForm(ChargeController controller, bool startInTray = false)
     {
         _controller = controller;
+        _startInTray = startInTray;
         Text = "电池充电助手";
-        Icon = _applicationIcon;
+        Icon = _icons.WindowFor(null);
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(590, 700);
-        MinimumSize = new Size(570, 700);
+        ClientSize = new Size(590, 780);
+        MinimumSize = new Size(570, 780);
         BackColor = Color.FromArgb(247, 249, 252);
         AutoScaleMode = AutoScaleMode.Dpi;
 
         BuildWindow();
         BuildTrayMenu();
-        _trayIcon = new Icon(_applicationIcon, SystemInformation.SmallIconSize);
         _tray = new NotifyIcon
         {
-            Icon = _trayIcon,
-            Text = "电池充电助手",
+            Icon = _icons.TrayFor(null),
+            Text = "电池充电助手 · 正在检测",
             ContextMenuStrip = _trayMenu,
             Visible = true
         };
@@ -64,14 +71,37 @@ internal sealed class MainForm : Form
                 await ApplyModeAsync(choice.Mode);
         };
         _night.Click += async (_, _) => await ToggleNightAsync();
+        _startup.Click += async (_, _) => await ToggleStartupAsync();
         _refresh.Click += async (_, _) => await RefreshAsync();
-        Shown += async (_, _) => await RefreshAsync();
+        Shown += async (_, _) => await InitializeAsync();
         Resize += (_, _) =>
         {
             if (WindowState == FormWindowState.Minimized)
                 Hide();
         };
         UpdateEnabledState();
+    }
+
+    protected override void SetVisibleCore(bool value)
+    {
+        if (value && _startInTray)
+        {
+            _startInTray = false;
+            if (!IsHandleCreated)
+                CreateHandle();
+            // Initialize after the message loop starts, without showing a startup window.
+            BeginInvoke(new Action(async () => await InitializeAsync()));
+            value = false;
+        }
+        base.SetVisibleCore(value);
+    }
+
+    private async Task InitializeAsync()
+    {
+        if (_initialized)
+            return;
+        _initialized = true;
+        await RefreshAsync();
     }
 
     private void BuildWindow()
@@ -81,10 +111,10 @@ internal sealed class MainForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(22),
             ColumnCount = 1,
-            RowCount = 8
+            RowCount = 9
         };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (var row = 0; row < 7; row++)
+        for (var row = 0; row < 8; row++)
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
@@ -127,6 +157,19 @@ internal sealed class MainForm : Form
         nightPanel.Controls.Add(TextLabel("夜间先充到 80%，早晨再补满；具体安排由设备决定。"));
         layout.Controls.Add(Card("夜间充电", nightPanel), 0, 3);
 
+        var startupPanel = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Padding = new Padding(12)
+        };
+        _startupInfo.MaximumSize = new Size(470, 0);
+        startupPanel.Controls.Add(_startup);
+        startupPanel.Controls.Add(_startupInfo);
+        layout.Controls.Add(Card("启动设置", startupPanel), 0, 4);
+
         var summary = new FlowLayoutPanel
         {
             AutoSize = true,
@@ -136,7 +179,7 @@ internal sealed class MainForm : Form
         };
         summary.Controls.Add(_powerState);
         summary.Controls.Add(_lastRead);
-        layout.Controls.Add(summary, 0, 4);
+        layout.Controls.Add(summary, 0, 5);
 
         var actions = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false };
         actions.Controls.Add(_refresh);
@@ -146,12 +189,12 @@ internal sealed class MainForm : Form
         var quit = new Button { Text = "退出", AutoSize = true };
         quit.Click += (_, _) => Quit();
         actions.Controls.Add(quit);
-        layout.Controls.Add(actions, 0, 5);
+        layout.Controls.Add(actions, 0, 6);
 
         _status.MaximumSize = new Size(500, 0);
         _status.Margin = new Padding(0, 8, 0, 8);
-        layout.Controls.Add(_status, 0, 6);
-        layout.Controls.Add(_details, 0, 7);
+        layout.Controls.Add(_status, 0, 7);
+        layout.Controls.Add(_details, 0, 8);
         Controls.Add(layout);
     }
 
@@ -172,6 +215,8 @@ internal sealed class MainForm : Form
         _nightItem.Click += async (_, _) => await ToggleNightAsync();
         _trayMenu.Items.Add(new ToolStripSeparator());
         _trayMenu.Items.Add(_nightItem);
+        _startupItem.Click += async (_, _) => await ToggleStartupAsync();
+        _trayMenu.Items.Add(_startupItem);
         _refreshItem.Click += async (_, _) => await RefreshAsync();
         _trayMenu.Items.Add(_refreshItem);
         _quitItem.Click += (_, _) => Quit();
@@ -180,6 +225,7 @@ internal sealed class MainForm : Form
 
     private Task RefreshAsync() => PerformAsync(async () =>
     {
+        await RefreshStartupAsync();
         await LoadSnapshotAsync();
         return _snapshot is { Mode.IsAvailable: true, NightCharge.IsAvailable: true }
             ? "状态已更新。"
@@ -204,9 +250,72 @@ internal sealed class MainForm : Form
         });
     }
 
+    private async Task RefreshStartupAsync()
+    {
+        try
+        {
+            SetStartupState(await Task.Run(_startupManager.Read));
+        }
+        catch (Exception error)
+        {
+            _startupEnabled = null;
+            _startup.Checked = false;
+            _startupItem.Checked = false;
+            _startupItem.Text = "开启自动启动（状态未知）";
+            _startupInfo.Text = $"自动启动状态读取失败：{error.Message}";
+            _startupInfo.ForeColor = Color.FromArgb(174, 49, 49);
+        }
+    }
+
+    private void SetStartupState(StartupRegistration registration)
+    {
+        var enabled = registration.Enabled;
+        _startupEnabled = enabled;
+        _startup.Checked = enabled;
+        _startupItem.Checked = enabled;
+        _startupItem.Text = "开机自动启动";
+        _startupInfo.Text = enabled && !registration.UsesCurrentPath
+            ? "已开启，但程序位置已变化；请关闭后重新开启以更新路径。"
+            : enabled
+                ? "已开启：登录后自动运行并收起到托盘。移动程序后请重新开启。"
+                : "已关闭：登录后不会自动启动。";
+        _startupInfo.ForeColor = Color.FromArgb(69, 85, 105);
+    }
+
+    private async Task ToggleStartupAsync()
+    {
+        if (_busy || _startupBusy)
+            return;
+        var enabled = _startupEnabled != true;
+        _startupBusy = true;
+        UpdateEnabledState();
+        _startupInfo.Text = "正在更新自动启动设置…";
+        try
+        {
+            await Task.Run(() => _startupManager.SetEnabled(enabled));
+            var actual = await Task.Run(_startupManager.Read);
+            if (actual.Enabled != enabled || (enabled && !actual.UsesCurrentPath))
+                throw new IOException("自动启动设置未生效，请刷新后重试。");
+            SetStartupState(actual);
+        }
+        catch (Exception error)
+        {
+            await RefreshStartupAsync();
+            _startupInfo.Text = $"自动启动设置未完成：{error.Message}";
+            _startupInfo.ForeColor = Color.FromArgb(174, 49, 49);
+            if (!Visible)
+                ShowWindow();
+        }
+        finally
+        {
+            _startupBusy = false;
+            UpdateEnabledState();
+        }
+    }
+
     private async Task PerformAsync(Func<Task<string>> operation, bool refreshAfter = true)
     {
-        if (_busy)
+        if (_busy || _startupBusy)
             return;
 
         _busy = true;
@@ -237,6 +346,7 @@ internal sealed class MainForm : Form
                 foreach (var item in _modeItems.Values)
                     item.Checked = false;
                 _nightItem.Checked = false;
+                UpdateModeIcon(null);
             }
 
             _status.Text = "操作未完成，请查看下方原因。";
@@ -281,7 +391,7 @@ internal sealed class MainForm : Form
             _ => "供电状态未知"
         };
         _powerState.Text = $"{battery} · {source}";
-        _tray.Text = mode.HasValue ? $"电池充电助手 · {ModeName(mode.Value)}" : "电池充电助手 · 功能不可用";
+        UpdateModeIcon(mode);
 
         var problems = new List<string>();
         if (_snapshot.Mode.Error is string modeError)
@@ -293,18 +403,28 @@ internal sealed class MainForm : Form
             : string.Join(Environment.NewLine + Environment.NewLine, problems);
     }
 
+    private void UpdateModeIcon(ChargeMode? mode)
+    {
+        Icon = _icons.WindowFor(mode);
+        _tray.Icon = _icons.TrayFor(mode);
+        _tray.Text = mode.HasValue ? $"电池充电助手 · {ModeName(mode.Value)}" : "电池充电助手 · 模式未知";
+    }
+
     private void UpdateEnabledState()
     {
-        var modeAvailable = !_busy && _snapshot?.Mode.IsAvailable == true;
+        var idle = !_busy && !_startupBusy;
+        var modeAvailable = idle && _snapshot?.Mode.IsAvailable == true;
         _modePicker.Enabled = modeAvailable;
         _apply.Enabled = modeAvailable;
         foreach (var item in _modeItems.Values)
             item.Enabled = modeAvailable;
-        _night.Enabled = !_busy && _snapshot?.NightCharge.IsAvailable == true;
+        _night.Enabled = idle && _snapshot?.NightCharge.IsAvailable == true;
         _nightItem.Enabled = _night.Enabled;
-        _refresh.Enabled = !_busy;
-        _refreshItem.Enabled = !_busy;
-        _quitItem.Enabled = !_busy;
+        _startup.Enabled = idle;
+        _startupItem.Enabled = idle;
+        _refresh.Enabled = idle;
+        _refreshItem.Enabled = idle;
+        _quitItem.Enabled = idle;
     }
 
     private void ShowWindow()
@@ -316,7 +436,7 @@ internal sealed class MainForm : Form
 
     private void Quit()
     {
-        if (_busy)
+        if (_busy || _startupBusy)
         {
             _status.Text = "请等待当前操作完成后再退出。";
             ShowWindow();
@@ -344,21 +464,11 @@ internal sealed class MainForm : Form
         {
             _tray.Visible = false;
             _tray.Dispose();
-            _trayIcon.Dispose();
             _trayMenu.Dispose();
         }
         base.Dispose(disposing);
         if (disposing)
-            _applicationIcon.Dispose();
-    }
-
-    private static Icon LoadApplicationIcon()
-    {
-        using var stream = typeof(MainForm).Assembly.GetManifestResourceStream(
-            "BatteryCharge.App.Assets.BatteryCharge.ico")
-            ?? throw new InvalidOperationException("Application icon resource is missing.");
-        using var icon = new Icon(stream);
-        return (Icon)icon.Clone();
+            _icons.Dispose();
     }
 
     private static Label TextLabel(string text) => new()

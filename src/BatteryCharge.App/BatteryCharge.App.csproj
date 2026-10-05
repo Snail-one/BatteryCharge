@@ -14,6 +14,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../BatteryCharge.Core/BatteryCharge.Core.csproj" />
-    <EmbeddedResource Include="Assets/BatteryCharge.ico" LogicalName="BatteryCharge.App.Assets.BatteryCharge.ico" />
+    <EmbeddedResource Include="Assets/*.ico" LogicalName="BatteryCharge.App.Assets.%(Filename)%(Extension)" />
   </ItemGroup>
 </Project>

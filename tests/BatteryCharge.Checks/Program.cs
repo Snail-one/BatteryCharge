@@ -1,4 +1,6 @@
 using BatteryCharge.Core;
+using BatteryCharge.App;
+using System.Xml.Linq;
 
 // Dependency-free behavioral checks: no device access, test SDK, or test packages.
 var checks = new (string Name, Func<Task> Run)[]
@@ -15,7 +17,11 @@ var checks = new (string Name, Func<Task> Run)[]
     ("Delayed state change is retried", DelayedStateChange),
     ("Driver write failure stops the sequence", FailedWriteStopsSequence),
     ("Invalid enum never accesses the device", InvalidModeDoesNotTouchDevice),
-    ("Concurrent requests cannot split a mode sequence", ConcurrentRequestsAreSerialized)
+    ("Concurrent requests cannot split a mode sequence", ConcurrentRequestsAreSerialized),
+    ("Startup task preserves executable paths and interactive battery operation", StartupTaskConfiguration),
+    ("Disabled tasks and logon triggers are reported as disabled", DisabledStartupTask),
+    ("Moved executable retains enabled state and reports stale path", MovedStartupExecutable),
+    ("Foreign tasks and other users cannot be modified", ForeignStartupTask)
 };
 
 var failures = 0;
@@ -189,6 +195,73 @@ static async Task ConcurrentRequestsAreSerialized()
     }
     foreach (var mode in Enum.GetValues<ChargeMode>())
         Assert(completedModes.Count(item => item == mode) == 6, "A mode request was lost.");
+}
+
+static Task StartupTaskConfiguration()
+{
+    const string sid = "S-1-5-21-123-456-789-1001";
+    const string path = @"D:\电池 & tools\BatteryCharge.exe";
+    var xml = StartupTaskDefinition.Create(sid, path);
+    var task = XElement.Parse(xml);
+    XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
+    Assert((string?)task.Element(ns + "Actions")?.Element(ns + "Exec")?.Element(ns + "Command") == path,
+        "Paths containing spaces, Unicode and XML metacharacters must round-trip.");
+    Assert((string?)task.Element(ns + "Actions")?.Element(ns + "Exec")?.Element(ns + "Arguments") == "--startup",
+        "Autostart must use tray-only launch.");
+    var status = StartupTaskDefinition.Read(xml, sid, path);
+    Assert(status.Enabled && status.UsesCurrentPath, "New task should be enabled for this path.");
+    var settings = task.Element(ns + "Settings")!;
+    Assert((bool?)settings.Element(ns + "DisallowStartIfOnBatteries") == false,
+        "Startup must work when running on battery.");
+    Assert((bool?)settings.Element(ns + "StopIfGoingOnBatteries") == false,
+        "Unplugging AC must not stop the application.");
+    Assert((string?)settings.Element(ns + "ExecutionTimeLimit") == "PT0S",
+        "A tray app must not be stopped after the scheduler's default time limit.");
+    Assert((string?)task.Element(ns + "Triggers")?.Element(ns + "LogonTrigger")?.Element(ns + "UserId") == sid,
+        "Startup must apply only to the selected user.");
+    return Task.CompletedTask;
+}
+
+static Task DisabledStartupTask()
+{
+    const string sid = "S-1-5-21-123-456-789-1001";
+    const string path = @"D:\BatteryCharge\BatteryCharge.exe";
+    XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
+    var task = XElement.Parse(StartupTaskDefinition.Create(sid, path));
+    task.Element(ns + "Settings")!.Element(ns + "Enabled")!.Value = "false";
+    Assert(!StartupTaskDefinition.Read(task.ToString(), sid, path).Enabled, "A disabled task was shown as enabled.");
+    task.Element(ns + "Settings")!.Element(ns + "Enabled")!.Value = "true";
+    task.Element(ns + "Triggers")!.Element(ns + "LogonTrigger")!.Element(ns + "Enabled")!.Value = "false";
+    Assert(!StartupTaskDefinition.Read(task.ToString(), sid, path).Enabled, "A disabled trigger was shown as enabled.");
+    return Task.CompletedTask;
+}
+
+static Task MovedStartupExecutable()
+{
+    const string sid = "S-1-5-21-123-456-789-1001";
+    var xml = StartupTaskDefinition.Create(sid, @"D:\Old\BatteryCharge.exe");
+    var status = StartupTaskDefinition.Read(xml, sid, @"D:\New\BatteryCharge.exe");
+    Assert(status.Enabled && !status.UsesCurrentPath, "An active task at an old path must not look disabled.");
+    return Task.CompletedTask;
+}
+
+static async Task ForeignStartupTask()
+{
+    const string sid = "S-1-5-21-123-456-789-1001";
+    var xml = StartupTaskDefinition.Create(sid, @"D:\BatteryCharge\BatteryCharge.exe");
+    XNamespace ns = "http://schemas.microsoft.com/windows/2004/02/mit/task";
+    var foreign = XElement.Parse(xml);
+    foreign.Element(ns + "RegistrationInfo")!.Element(ns + "Source")!.Value = "AnotherApp";
+    await Throws<InvalidOperationException>(() =>
+    {
+        StartupTaskDefinition.ParseOwned(foreign.ToString(), sid);
+        return Task.CompletedTask;
+    });
+    await Throws<InvalidOperationException>(() =>
+    {
+        StartupTaskDefinition.ParseOwned(xml, "S-1-5-21-123-456-789-1002");
+        return Task.CompletedTask;
+    });
 }
 
 sealed class FakeTransport : IEnergyTransport
