@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Text;
 using BatteryCharge.Core;
 using Microsoft.Win32.SafeHandles;
 
@@ -80,6 +81,46 @@ internal sealed class SafeDirectory : IDisposable
         throw new IOException(UiText.Get("UnsafeStartupPath", path), new Win32Exception(error));
     }
 
+    internal static SafeFileHandle CreateNewWritableFile(string path)
+    {
+        // GENERIC_WRITE | DELETE | FILE_READ_ATTRIBUTES, CREATE_NEW, no sharing.
+        // DELETE lets this same handle rename the file after the buffered write.
+        var handle = Native.CreateFileW(path, 0x40010080, 0, IntPtr.Zero, 1, 0x00200000, IntPtr.Zero);
+        if (!handle.IsInvalid)
+            return handle;
+        var error = new Win32Exception(Marshal.GetLastWin32Error());
+        handle.Dispose();
+        throw new IOException(error.Message, error);
+    }
+
+    internal static void RenameFileInSameDirectory(SafeFileHandle handle, string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name is "." or ".."
+            || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            throw new ArgumentException("A simple file name is required.", nameof(name));
+        // Native FileRenameInformation with a simple name and NULL RootDirectory
+        // renames within the source file's directory. File.Move instead opens the
+        // target directory for writing, conflicting with the directory lease.
+        // Do not release the lease or use Win32's current-directory-relative rename.
+        var bytes = Encoding.Unicode.GetBytes(name);
+        var size = checked(Marshal.SizeOf<Native.RenameInformation>() + bytes.Length);
+        var buffer = Marshal.AllocHGlobal(size);
+        try
+        {
+            var info = new Native.RenameInformation { ReplaceIfExists = 1, FileNameLength = (uint)bytes.Length };
+            Marshal.StructureToPtr(info, buffer, false);
+            var offset = Marshal.OffsetOf<Native.RenameInformation>(nameof(Native.RenameInformation.FileName)).ToInt32();
+            Marshal.Copy(bytes, 0, IntPtr.Add(buffer, offset), bytes.Length);
+            var status = Native.NtSetInformationFile(handle, out _, buffer, (uint)size, 10); // FileRenameInformation
+            if (status < 0)
+            {
+                var error = new Win32Exception(unchecked((int)Native.RtlNtStatusToDosError(status)));
+                throw new IOException(error.Message, error);
+            }
+        }
+        finally { Marshal.FreeHGlobal(buffer); }
+    }
+
     public void Dispose()
     {
         for (var index = _handles.Count - 1; index >= 0; index--)
@@ -91,6 +132,25 @@ internal sealed class SafeDirectory : IDisposable
     {
         [StructLayout(LayoutKind.Sequential)]
         internal struct AttributeTag { internal uint Attributes; internal uint Tag; }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        internal struct RenameInformation
+        {
+            internal uint ReplaceIfExists;
+            internal IntPtr RootDirectory;
+            internal uint FileNameLength;
+            internal char FileName;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct IoStatusBlock { internal IntPtr Status; internal UIntPtr Information; }
+
+        [DllImport("ntdll.dll", ExactSpelling = true)]
+        internal static extern int NtSetInformationFile(SafeFileHandle file, out IoStatusBlock status,
+            IntPtr information, uint length, int informationClass);
+
+        [DllImport("ntdll.dll", ExactSpelling = true)]
+        internal static extern uint RtlNtStatusToDosError(int status);
 
         [DllImport("kernel32.dll", ExactSpelling = true, CharSet = CharSet.Unicode, SetLastError = true)]
         internal static extern SafeFileHandle CreateFileW(string name, uint access, uint share,

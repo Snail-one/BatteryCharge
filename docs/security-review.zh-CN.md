@@ -10,6 +10,8 @@
 
 Windows CI 后续暴露了目录句柄仅请求属性访问时未能阻止写入句柄的问题。目录句柄现增加 `FILE_LIST_DIRECTORY`，普通文件验证句柄增加 `FILE_READ_DATA`，使共享限制参与读写检查。回归检查覆盖锁定前、锁定期间、释放后及子文件读写，失败时输出实际 Win32 错误码。启动 ACL 测试改用 `FileSystemRights` 构造删除子项和创建子目录权限，避免混用目录服务的 SDDL 权限缩写。这些 Windows 回归尚需在 Windows 上执行确认。
 
+随后 Windows CI 显示普通 `File.Move` 的父目录写入打开与目录锁冲突，导致配置保存失败。Windows 配置提交改为独占创建临时文件，刷新缓冲区后通过同一文件句柄执行原生同目录重命名；仅传入目标文件名和空 `RootDirectory`，保存期间不释放目录锁。接口依据微软的 [FILE_RENAME_INFORMATION 同目录重命名说明](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/ntifs/ns-ntifs-_file_rename_information)。Windows 回归检查增加了锁定期间的新建、覆盖、目标被占用时保留原配置和清理临时文件，以及正常清理后仍持有目录锁。
+
 | 编号 | 已实现的修复 | 验证范围 |
 | --- | --- | --- |
 | S1 | 读取、保存和清理均拒绝目录路径各级的重解析点；Windows 操作期间持有不共享写入/删除的目录句柄；临时配置使用独占 CreateNew | Linux 链接回归通过；Windows 路径锁测试已加入基础检查 |

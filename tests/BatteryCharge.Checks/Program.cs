@@ -244,6 +244,10 @@ static async Task WindowsDirectoryLease()
             LanguagePreferences.Save(settings, "en-US");
             Assert(LanguagePreferences.Load(settings, CultureInfo.GetCultureInfo("zh-CN")) == "en-US",
                 "Reading settings must remain possible while directories are pinned.");
+            LanguagePreferences.Save(settings, "zh-CN");
+            Assert(LanguagePreferences.Load(settings, CultureInfo.GetCultureInfo("en-US")) == "zh-CN",
+                "Replacing settings must remain possible while directories are pinned.");
+            Assert(!Directory.EnumerateFiles(leaf, ".settings-*.tmp").Any(), "A successful commit left a temporary file.");
             var initialFileWriteError = WindowsDirectoryProbe.TryWrite(settings, isDirectory: false);
             Assert(initialFileWriteError == 0, $"File write probe must succeed before locking; Win32 error {initialFileWriteError}.");
             using (SafeDirectory.OpenRegularFile(settings))
@@ -252,9 +256,17 @@ static async Task WindowsDirectoryLease()
                 Assert(fileWriteError == 32,
                     $"A pinned executable/configuration file must deny write handles; expected Win32 error 32, got {fileWriteError}.");
                 await Throws<IOException>(() => { File.Move(settings, settings + ".moved"); return Task.CompletedTask; });
+                await Throws<IOException>(() => { LanguagePreferences.Save(settings, "en-US"); return Task.CompletedTask; });
+                Assert(!Directory.EnumerateFiles(leaf, ".settings-*.tmp").Any(), "A failed commit left a temporary file.");
             }
+            Assert(LanguagePreferences.Load(settings, CultureInfo.GetCultureInfo("en-US")) == "zh-CN",
+                "A failed replacement changed the existing settings.");
             var releasedFileWriteError = WindowsDirectoryProbe.TryWrite(settings, isDirectory: false);
             Assert(releasedFileWriteError == 0, $"File sharing was not restored after disposal; Win32 error {releasedFileWriteError}.");
+            CleanupService.Run(() => { }, settings);
+            Assert(!File.Exists(settings), "Cleanup must remain possible while directories are pinned.");
+            var remainingWriteError = WindowsDirectoryProbe.TryWrite(leaf);
+            Assert(remainingWriteError == 32, $"Saving and cleanup must not release the directory lease; Win32 error {remainingWriteError}.");
         }
         var releasedWriteError = WindowsDirectoryProbe.TryWrite(leaf);
         Assert(releasedWriteError == 0, $"Directory write sharing was not restored after disposal; Win32 error {releasedWriteError}.");

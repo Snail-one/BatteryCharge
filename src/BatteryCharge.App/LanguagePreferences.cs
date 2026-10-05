@@ -58,15 +58,32 @@ internal static class LanguagePreferences
         var directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
         using var lease = SafeDirectory.Acquire(directory, create: true);
         var temporary = Path.Combine(directory, $".settings-{Guid.NewGuid():N}.tmp");
+        var created = false;
         try
         {
-            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            if (OperatingSystem.IsWindows())
+            {
+                // Keep the newly created file exclusively open through the commit.
+                using var handle = SafeDirectory.CreateNewWritableFile(temporary);
+                created = true;
+                using var stream = new FileStream(handle, FileAccess.Write);
                 JsonSerializer.Serialize(stream, new { language });
-            File.Move(temporary, path, overwrite: true);
+                stream.Flush();
+                SafeDirectory.RenameFileInSameDirectory(handle, Path.GetFileName(path));
+            }
+            else
+            {
+                using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                {
+                    created = true;
+                    JsonSerializer.Serialize(stream, new { language });
+                }
+                File.Move(temporary, path, overwrite: true);
+            }
         }
         finally
         {
-            if (File.Exists(temporary))
+            if (created && File.Exists(temporary))
                 File.Delete(temporary);
         }
     }
