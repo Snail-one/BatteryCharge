@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using BatteryCharge.Core;
 
 namespace BatteryCharge.App;
 
@@ -15,7 +16,7 @@ internal static class StartupTaskDefinition
         ArgumentException.ThrowIfNullOrWhiteSpace(executablePath);
         var task = new XElement(Ns + "Task", new XAttribute("version", "1.2"),
             new XElement(Ns + "RegistrationInfo",
-                new XElement(Ns + "Description", "电池充电助手：用户登录后自动启动到托盘。"),
+                new XElement(Ns + "Description", UiText.Get("StartupTaskDescription")),
                 new XElement(Ns + "Source", Owner)),
             new XElement(Ns + "Triggers",
                 new XElement(Ns + "LogonTrigger",
@@ -47,7 +48,7 @@ internal static class StartupTaskDefinition
         if (task.Name != Ns + "Task"
             || (string?)task.Element(Ns + "RegistrationInfo")?.Element(Ns + "Source") != Owner
             || (string?)task.Element(Ns + "Principals")?.Element(Ns + "Principal")?.Element(Ns + "UserId") != userSid)
-            throw new InvalidOperationException("同名计划任务不属于当前用户的电池充电助手，未修改该任务。");
+            throw new InvalidOperationException(UiText.Get("ForeignStartupTask"));
         return task;
     }
 

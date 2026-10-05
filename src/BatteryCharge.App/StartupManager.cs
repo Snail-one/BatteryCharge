@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using System.Security.Principal;
+using BatteryCharge.Core;
 
 namespace BatteryCharge.App;
 
@@ -13,9 +14,9 @@ internal sealed class StartupManager
     {
         using var identity = WindowsIdentity.GetCurrent();
         _userSid = identity.User?.Value
-            ?? throw new InvalidOperationException("无法确定当前 Windows 用户。");
+            ?? throw new InvalidOperationException(UiText.Get("CurrentUserMissing"));
         _executablePath = Environment.ProcessPath
-            ?? throw new InvalidOperationException("无法确定程序路径。");
+            ?? throw new InvalidOperationException(UiText.Get("ExecutableMissing"));
         _taskName = $"BatteryCharge.Startup.{_userSid}";
     }
 
@@ -37,7 +38,7 @@ internal sealed class StartupManager
     {
         // A framework-dependent DLL launched via dotnet.exe is not a stable startup target.
         if (enabled && !string.Equals(Path.GetFileName(_executablePath), "BatteryCharge.exe", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("请使用发布目录中的 BatteryCharge.exe 开启自动启动。");
+            throw new InvalidOperationException(UiText.Get("UsePublishedExecutable"));
 
         WithFolder(folder =>
         {
@@ -88,7 +89,7 @@ internal sealed class StartupManager
         {
             var type = Type.GetTypeFromProgID("Schedule.Service", throwOnError: true)!;
             service = Activator.CreateInstance(type)
-                ?? throw new InvalidOperationException("无法连接 Windows 任务计划程序。");
+                ?? throw new InvalidOperationException(UiText.Get("SchedulerUnavailable"));
             ((dynamic)service).Connect();
             folder = ((dynamic)service).GetFolder(@"\");
             return action(folder);

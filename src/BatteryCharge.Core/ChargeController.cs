@@ -40,7 +40,7 @@ public sealed class ChargeController
             foreach (var command in commands)
                 _transport.Send(ChargeProtocol.ModeControlCode, command);
 
-            return Verify(ReadMode, mode, "充电模式");
+            return Verify(ReadMode, mode, "ChargeMode");
         });
     }
 
@@ -49,7 +49,7 @@ public sealed class ChargeController
         // Invalid/unsupported night state must prevent the write.
         _ = ReadNightCharge();
         _transport.Send(ChargeProtocol.NightControlCode, ChargeProtocol.NightCommand(enabled));
-        return Verify(ReadNightCharge, enabled, "夜间充电");
+        return Verify(ReadNightCharge, enabled, "NightCharge");
     });
 
     private ChargeMode ReadMode() => ChargeProtocol.DecodeMode(
@@ -83,8 +83,15 @@ public sealed class ChargeController
                 return actual;
         }
 
-        throw new TimeoutException($"{feature}设置未生效。目标：{expected}；实际：{actual}。请刷新状态后重试。");
+        throw new TimeoutException(UiText.Get("VerificationFailed", UiText.Get(feature), ValueName(expected), ValueName(actual)));
     }
+
+    private static string ValueName<T>(T value) where T : struct => value switch
+    {
+        ChargeMode mode => UiText.ModeName(mode),
+        bool enabled => UiText.Get(enabled ? "Enabled" : "Disabled"),
+        _ => value.ToString() ?? ""
+    };
 
     private async Task<T> SerializedAsync<T>(Func<T> operation)
     {

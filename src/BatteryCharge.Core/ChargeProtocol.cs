@@ -27,7 +27,7 @@ public static class ChargeProtocol
     public static bool DecodeNightCharge(uint flags)
     {
         if ((flags & 1) == 0)
-            throw new NotSupportedException($"设备未报告有效的夜间充电状态（0x{flags:X8}）。");
+            throw new NotSupportedException(UiText.Get("InvalidNightState", flags));
 
         return (flags & 0x10) != 0;
     }

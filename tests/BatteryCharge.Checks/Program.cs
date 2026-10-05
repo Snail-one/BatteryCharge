@@ -1,6 +1,7 @@
 using BatteryCharge.Core;
 using BatteryCharge.App;
 using System.Xml.Linq;
+using System.Globalization;
 
 // Dependency-free behavioral checks: no device access, test SDK, or test packages.
 var checks = new (string Name, Func<Task> Run)[]
@@ -21,7 +22,10 @@ var checks = new (string Name, Func<Task> Run)[]
     ("Startup task preserves executable paths and interactive battery operation", StartupTaskConfiguration),
     ("Disabled tasks and logon triggers are reported as disabled", DisabledStartupTask),
     ("Moved executable retains enabled state and reports stale path", MovedStartupExecutable),
-    ("Foreign tasks and other users cannot be modified", ForeignStartupTask)
+    ("Foreign tasks and other users cannot be modified", ForeignStartupTask),
+    ("Language choice is saved and survives restart", LanguagePreferenceRoundTrip),
+    ("Missing, damaged and unsupported language settings fall back safely", LanguagePreferenceFallback),
+    ("UI and driver errors switch languages independently of thread culture", LanguageResources)
 };
 
 var failures = 0;
@@ -262,6 +266,87 @@ static async Task ForeignStartupTask()
         StartupTaskDefinition.ParseOwned(xml, "S-1-5-21-123-456-789-1002");
         return Task.CompletedTask;
     });
+}
+
+static Task LanguagePreferenceRoundTrip()
+{
+    var directory = Path.Combine(Path.GetTempPath(), $"BatteryCharge-language-{Guid.NewGuid():N}");
+    var path = Path.Combine(directory, "settings.json");
+    try
+    {
+        LanguagePreferences.Save(path, "en-US");
+        Assert(LanguagePreferences.Load(path, CultureInfo.GetCultureInfo("zh-CN")) == "en-US",
+            "Saved English choice must override the system language.");
+        LanguagePreferences.Save(path, "zh-CN");
+        Assert(LanguagePreferences.Load(path, CultureInfo.GetCultureInfo("en-US")) == "zh-CN",
+            "Changing to Chinese must replace the previous setting.");
+        Assert(Directory.GetFiles(directory).Length == 1, "Temporary preference files were left behind.");
+    }
+    finally
+    {
+        if (Directory.Exists(directory))
+            Directory.Delete(directory, recursive: true);
+    }
+    return Task.CompletedTask;
+}
+
+static Task LanguagePreferenceFallback()
+{
+    var directory = Path.Combine(Path.GetTempPath(), $"BatteryCharge-language-{Guid.NewGuid():N}");
+    var path = Path.Combine(directory, "settings.json");
+    try
+    {
+        Assert(LanguagePreferences.Load(path, CultureInfo.GetCultureInfo("zh-TW")) == "zh-CN",
+            "A Chinese system locale must select Chinese without a settings file.");
+        Assert(LanguagePreferences.Load(path, CultureInfo.GetCultureInfo("fr-FR")) == "en-US",
+            "Other system locales must fall back to English.");
+        Directory.CreateDirectory(directory);
+        foreach (var invalid in new[] { "broken json", "null", "[]", "{}", "{\"language\":42}", "{\"language\":\"de-DE\"}" })
+        {
+            File.WriteAllText(path, invalid);
+            Assert(LanguagePreferences.Load(path, CultureInfo.GetCultureInfo("en-US")) == "en-US",
+                "Invalid preferences must not prevent startup or select an unsupported language.");
+        }
+    }
+    finally
+    {
+        if (Directory.Exists(directory))
+            Directory.Delete(directory, recursive: true);
+    }
+    return Task.CompletedTask;
+}
+
+static Task LanguageResources()
+{
+    var original = UiText.Language;
+    try
+    {
+        foreach (var (language, modeName, errorText) in new[]
+        {
+            ("en-US", "Normal charging", "The device did not report"),
+            ("zh-CN", "普通充电", "设备未报告")
+        })
+        {
+            UiText.SetLanguage(language);
+            Assert(UiText.ModeName(ChargeMode.Normal) == modeName, "Mode text did not change language.");
+            Assert(UiText.Get("CurrentMode", modeName).Contains(modeName), "Formatted translation lost its argument.");
+            try
+            {
+                ChargeProtocol.DecodeNightCharge(0x10);
+                throw new InvalidOperationException("Expected an unsupported night state.");
+            }
+            catch (NotSupportedException error)
+            {
+                Assert(error.Message.Contains(errorText) && error.Message.Contains("0x00000010"),
+                    "Driver error translation must preserve the diagnostic value.");
+            }
+        }
+    }
+    finally
+    {
+        UiText.SetLanguage(original);
+    }
+    return Task.CompletedTask;
 }
 
 sealed class FakeTransport : IEnergyTransport

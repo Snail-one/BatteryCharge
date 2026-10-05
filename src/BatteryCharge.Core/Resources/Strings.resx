@@ -1,0 +1,249 @@
+<?xml version='1.0' encoding='utf-8'?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
+  </resheader>
+  <data xml:space="preserve" name="AppName">
+    <value>电池充电助手</value>
+  </data>
+  <data xml:space="preserve" name="AlreadyRunning">
+    <value>电池充电助手已在运行，请打开系统托盘中的图标。</value>
+  </data>
+  <data xml:space="preserve" name="Language">
+    <value>语言 / Language</value>
+  </data>
+  <data xml:space="preserve" name="LanguageMenu">
+    <value>语言</value>
+  </data>
+  <data xml:space="preserve" name="LanguageSaveFailed">
+    <value>无法保存语言设置：{0}</value>
+  </data>
+  <data xml:space="preserve" name="ApplyMode">
+    <value>应用充电模式</value>
+  </data>
+  <data xml:space="preserve" name="NightToggle">
+    <value>开启夜间充电</value>
+  </data>
+  <data xml:space="preserve" name="StartupToggle">
+    <value>开机自动启动</value>
+  </data>
+  <data xml:space="preserve" name="Refresh">
+    <value>刷新状态</value>
+  </data>
+  <data xml:space="preserve" name="Hide">
+    <value>收起到托盘</value>
+  </data>
+  <data xml:space="preserve" name="Quit">
+    <value>退出</value>
+  </data>
+  <data xml:space="preserve" name="Open">
+    <value>打开电池充电助手</value>
+  </data>
+  <data xml:space="preserve" name="Intro">
+    <value>选择充电策略，查看设备的实际状态。</value>
+  </data>
+  <data xml:space="preserve" name="ChargeMode">
+    <value>充电模式</value>
+  </data>
+  <data xml:space="preserve" name="NightCharge">
+    <value>夜间充电</value>
+  </data>
+  <data xml:space="preserve" name="StartupSettings">
+    <value>启动设置</value>
+  </data>
+  <data xml:space="preserve" name="ConservationHint">
+    <value>养护模式的充电上限由设备决定，不能自定义百分比。</value>
+  </data>
+  <data xml:space="preserve" name="NightHint">
+    <value>夜间先充到 80%，早晨再补满；具体安排由设备决定。</value>
+  </data>
+  <data xml:space="preserve" name="Detecting">
+    <value>正在检测…</value>
+  </data>
+  <data xml:space="preserve" name="ReadingDevice">
+    <value>正在读取设备状态…</value>
+  </data>
+  <data xml:space="preserve" name="ReadingStartup">
+    <value>正在读取自动启动设置…</value>
+  </data>
+  <data xml:space="preserve" name="StatusUpdated">
+    <value>状态已更新。</value>
+  </data>
+  <data xml:space="preserve" name="StatusPartial">
+    <value>状态已更新；部分功能不可用，请查看下方说明。</value>
+  </data>
+  <data xml:space="preserve" name="ModeApplied">
+    <value>已切换到{0}，并确认设备状态。</value>
+  </data>
+  <data xml:space="preserve" name="NightApplied">
+    <value>夜间充电已{0}，并确认设备状态。</value>
+  </data>
+  <data xml:space="preserve" name="Enabled">
+    <value>开启</value>
+  </data>
+  <data xml:space="preserve" name="Disabled">
+    <value>关闭</value>
+  </data>
+  <data xml:space="preserve" name="On">
+    <value>已开启</value>
+  </data>
+  <data xml:space="preserve" name="Off">
+    <value>已关闭</value>
+  </data>
+  <data xml:space="preserve" name="StartupUnknown">
+    <value>开启自动启动（状态未知）</value>
+  </data>
+  <data xml:space="preserve" name="StartupReadFailed">
+    <value>自动启动状态读取失败：{0}</value>
+  </data>
+  <data xml:space="preserve" name="StartupMoved">
+    <value>已开启，但程序位置已变化；请关闭后重新开启以更新路径。</value>
+  </data>
+  <data xml:space="preserve" name="StartupOn">
+    <value>已开启：登录后自动运行并收起到托盘。移动程序后请重新开启。</value>
+  </data>
+  <data xml:space="preserve" name="StartupOff">
+    <value>已关闭：登录后不会自动启动。</value>
+  </data>
+  <data xml:space="preserve" name="StartupUpdating">
+    <value>正在更新自动启动设置…</value>
+  </data>
+  <data xml:space="preserve" name="StartupNotApplied">
+    <value>自动启动设置未生效，请刷新后重试。</value>
+  </data>
+  <data xml:space="preserve" name="StartupWriteFailed">
+    <value>自动启动设置未完成：{0}</value>
+  </data>
+  <data xml:space="preserve" name="Working">
+    <value>正在读取或应用设置，请稍候…</value>
+  </data>
+  <data xml:space="preserve" name="ModeReadUnknown">
+    <value>当前模式：未知，请刷新状态</value>
+  </data>
+  <data xml:space="preserve" name="NightReadUnknown">
+    <value>夜间充电：未知，请刷新状态</value>
+  </data>
+  <data xml:space="preserve" name="OperationFailed">
+    <value>操作未完成，请查看下方原因。</value>
+  </data>
+  <data xml:space="preserve" name="FailureBalloon">
+    <value>操作未完成，打开窗口查看原因。</value>
+  </data>
+  <data xml:space="preserve" name="CurrentMode">
+    <value>当前模式：{0}</value>
+  </data>
+  <data xml:space="preserve" name="ModeUnavailable">
+    <value>充电模式不可用</value>
+  </data>
+  <data xml:space="preserve" name="CurrentState">
+    <value>当前状态：{0}</value>
+  </data>
+  <data xml:space="preserve" name="NightUnavailable">
+    <value>夜间充电不可用</value>
+  </data>
+  <data xml:space="preserve" name="LastRead">
+    <value>最后读取：{0:HH:mm:ss}</value>
+  </data>
+  <data xml:space="preserve" name="BatteryPercent">
+    <value>电量 {0:P0}</value>
+  </data>
+  <data xml:space="preserve" name="BatteryUnknown">
+    <value>电量未知</value>
+  </data>
+  <data xml:space="preserve" name="PowerOnline">
+    <value>已接通电源</value>
+  </data>
+  <data xml:space="preserve" name="PowerOffline">
+    <value>使用电池</value>
+  </data>
+  <data xml:space="preserve" name="PowerUnknown">
+    <value>供电状态未知</value>
+  </data>
+  <data xml:space="preserve" name="FeatureProblem">
+    <value>{0}：{1}</value>
+  </data>
+  <data xml:space="preserve" name="HealthyDetails">
+    <value>设备状态读取正常。关闭窗口会收起到托盘，使用“退出”结束程序。</value>
+  </data>
+  <data xml:space="preserve" name="TrayMode">
+    <value>{0} · {1}</value>
+  </data>
+  <data xml:space="preserve" name="TrayUnknown">
+    <value>模式未知</value>
+  </data>
+  <data xml:space="preserve" name="WaitBeforeQuit">
+    <value>请等待当前操作完成后再退出。</value>
+  </data>
+  <data xml:space="preserve" name="ModeNormal">
+    <value>普通充电</value>
+  </data>
+  <data xml:space="preserve" name="ModeConservation">
+    <value>电池养护</value>
+  </data>
+  <data xml:space="preserve" name="ModeRapid">
+    <value>快速充电</value>
+  </data>
+  <data xml:space="preserve" name="ModeUnknown">
+    <value>未知模式</value>
+  </data>
+  <data xml:space="preserve" name="CurrentUserMissing">
+    <value>无法确定当前 Windows 用户。</value>
+  </data>
+  <data xml:space="preserve" name="ExecutableMissing">
+    <value>无法确定程序路径。</value>
+  </data>
+  <data xml:space="preserve" name="UsePublishedExecutable">
+    <value>请使用发布目录中的 BatteryCharge.exe 开启自动启动。</value>
+  </data>
+  <data xml:space="preserve" name="SchedulerUnavailable">
+    <value>无法连接 Windows 任务计划程序。</value>
+  </data>
+  <data xml:space="preserve" name="ForeignStartupTask">
+    <value>同名计划任务不属于当前用户的电池充电助手，未修改该任务。</value>
+  </data>
+  <data xml:space="preserve" name="StartupTaskDescription">
+    <value>电池充电助手：用户登录后自动启动到托盘。</value>
+  </data>
+  <data xml:space="preserve" name="IconMissing">
+    <value>应用图标资源缺失：{0}。</value>
+  </data>
+  <data xml:space="preserve" name="OpenDevice">
+    <value>打开电池控制设备</value>
+  </data>
+  <data xml:space="preserve" name="AccessDevice">
+    <value>访问电池控制设备（0x{0:X8}）</value>
+  </data>
+  <data xml:space="preserve" name="InvalidReply">
+    <value>设备返回了无效的状态长度：{0} 字节，预期 4 字节。</value>
+  </data>
+  <data xml:space="preserve" name="DriverMissing">
+    <value>未找到联想电池控制驱动，或当前机型没有提供该设备。</value>
+  </data>
+  <data xml:space="preserve" name="DriverAccessDenied">
+    <value>访问被拒绝，请确认程序以管理员身份运行。</value>
+  </data>
+  <data xml:space="preserve" name="DriverUnsupported">
+    <value>驱动不支持此操作。</value>
+  </data>
+  <data xml:space="preserve" name="DriverCheck">
+    <value>请检查联想驱动和设备状态。</value>
+  </data>
+  <data xml:space="preserve" name="DriverFailure">
+    <value>{0}失败：{1}（错误 {2}）</value>
+  </data>
+  <data xml:space="preserve" name="InvalidNightState">
+    <value>设备未报告有效的夜间充电状态（0x{0:X8}）。</value>
+  </data>
+  <data xml:space="preserve" name="VerificationFailed">
+    <value>{0}设置未生效。目标：{1}；实际：{2}。请刷新状态后重试。</value>
+  </data>
+</root>

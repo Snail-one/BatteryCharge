@@ -1,4 +1,5 @@
 using BatteryCharge.Core;
+using System.Globalization;
 
 namespace BatteryCharge.App;
 
@@ -7,6 +8,7 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        UiText.SetLanguage(LanguagePreferences.Load(LanguagePreferences.SettingsPath, CultureInfo.CurrentUICulture));
         ApplicationConfiguration.Initialize();
 
         // Prevent two instances from interleaving firmware command sequences.
@@ -14,8 +16,8 @@ internal static class Program
         if (!firstInstance)
         {
             if (!args.Contains("--startup", StringComparer.OrdinalIgnoreCase))
-                MessageBox.Show("电池充电助手已在运行，请打开系统托盘中的图标。",
-                    "电池充电助手", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(UiText.Get("AlreadyRunning"),
+                    UiText.Get("AppName"), MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
 

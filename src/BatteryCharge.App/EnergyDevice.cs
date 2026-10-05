@@ -27,7 +27,7 @@ internal sealed class EnergyDevice : IEnergyTransport, IDisposable
         {
             var code = Marshal.GetLastWin32Error();
             handle.Dispose();
-            throw DriverError("打开电池控制设备", code);
+            throw DriverError(UiText.Get("OpenDevice"), code);
         }
 
         _handle = handle;
@@ -40,12 +40,12 @@ internal sealed class EnergyDevice : IEnergyTransport, IDisposable
             out var output, sizeof(uint), out var returned, IntPtr.Zero))
         {
             var code = Marshal.GetLastWin32Error();
-            throw DriverError($"访问电池控制设备（0x{controlCode:X8}）", code);
+            throw DriverError(UiText.Get("AccessDevice", controlCode), code);
         }
 
         // Set commands may return no payload. Queries must contain a complete uint.
         if (requireReply && returned != sizeof(uint))
-            throw new IOException($"设备返回了无效的状态长度：{returned} 字节，预期 4 字节。");
+            throw new IOException(UiText.Get("InvalidReply", returned));
 
         return output;
     }
@@ -54,13 +54,13 @@ internal sealed class EnergyDevice : IEnergyTransport, IDisposable
     {
         var hint = code switch
         {
-            2 or 3 => "未找到联想电池控制驱动，或当前机型没有提供该设备。",
-            5 => "访问被拒绝，请确认程序以管理员身份运行。",
-            1 or 50 => "驱动不支持此操作。",
-            _ => "请检查联想驱动和设备状态。"
+            2 or 3 => UiText.Get("DriverMissing"),
+            5 => UiText.Get("DriverAccessDenied"),
+            1 or 50 => UiText.Get("DriverUnsupported"),
+            _ => UiText.Get("DriverCheck")
         };
         var nativeError = new Win32Exception(code);
-        return new IOException($"{operation}失败：{hint}（错误 {code}：{nativeError.Message}）", nativeError);
+        return new IOException(UiText.Get("DriverFailure", operation, hint, code), nativeError);
     }
 
     public void Dispose()

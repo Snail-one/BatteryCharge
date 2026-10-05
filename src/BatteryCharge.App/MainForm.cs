@@ -5,19 +5,24 @@ namespace BatteryCharge.App;
 internal sealed class MainForm : Form
 {
     private readonly ChargeController _controller;
+    private readonly List<(Control Control, string Key)> _localizedControls = [];
+    private readonly List<(ToolStripItem Item, string Key)> _localizedMenus = [];
+    private readonly ComboBox _languagePicker = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 115 };
+    private readonly ToolStripMenuItem _languageMenu = new();
+    private readonly Dictionary<string, ToolStripMenuItem> _languageItems = [];
     private readonly ComboBox _modePicker = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 235 };
-    private readonly Button _apply = new() { Text = "应用充电模式", AutoSize = true };
-    private readonly CheckBox _night = new() { Text = "开启夜间充电", AutoSize = true, AutoCheck = false };
-    private readonly CheckBox _startup = new() { Text = "开机自动启动", AutoSize = true, AutoCheck = false };
-    private readonly Label _startupInfo = TextLabel("正在读取自动启动设置…");
+    private readonly Button _apply = new() { AutoSize = true };
+    private readonly CheckBox _night = new() { AutoSize = true, AutoCheck = false };
+    private readonly CheckBox _startup = new() { AutoSize = true, AutoCheck = false };
+    private readonly Label _startupInfo = TextLabel(T("ReadingStartup"));
     private readonly StartupManager _startupManager = new();
     private readonly ChargeIcons _icons = new();
-    private readonly Button _refresh = new() { Text = "刷新状态", AutoSize = true };
-    private readonly Label _modeState = TextLabel("正在检测…");
-    private readonly Label _nightState = TextLabel("正在检测…");
+    private readonly Button _refresh = new() { AutoSize = true };
+    private readonly Label _modeState = TextLabel(T("Detecting"));
+    private readonly Label _nightState = TextLabel(T("Detecting"));
     private readonly Label _powerState = TextLabel("");
     private readonly Label _lastRead = TextLabel("");
-    private readonly Label _status = TextLabel("正在读取设备状态…");
+    private readonly Label _status = TextLabel(T("ReadingDevice"));
     private readonly TextBox _details = new()
     {
         Multiline = true,
@@ -29,14 +34,16 @@ internal sealed class MainForm : Form
     };
     private readonly ContextMenuStrip _trayMenu = new();
     private readonly Dictionary<ChargeMode, ToolStripMenuItem> _modeItems = [];
-    private readonly ToolStripMenuItem _nightItem = new("开启夜间充电");
-    private readonly ToolStripMenuItem _startupItem = new("开机自动启动");
-    private readonly ToolStripMenuItem _refreshItem = new("刷新状态");
-    private readonly ToolStripMenuItem _quitItem = new("退出");
+    private readonly ToolStripMenuItem _nightItem = new();
+    private readonly ToolStripMenuItem _startupItem = new();
+    private readonly ToolStripMenuItem _refreshItem = new();
+    private readonly ToolStripMenuItem _quitItem = new();
     private readonly NotifyIcon _tray;
     private ChargeSnapshot? _snapshot;
     private bool? _startupEnabled;
     private bool _startupBusy;
+    private bool _languageBusy;
+    private bool _updatingLanguage;
     private bool _startInTray;
     private bool _initialized;
     private bool _busy;
@@ -46,7 +53,7 @@ internal sealed class MainForm : Form
     {
         _controller = controller;
         _startInTray = startInTray;
-        Text = "电池充电助手";
+        Text = T("AppName");
         Icon = _icons.WindowFor(null);
         StartPosition = FormStartPosition.CenterScreen;
         ClientSize = new Size(590, 780);
@@ -59,11 +66,17 @@ internal sealed class MainForm : Form
         _tray = new NotifyIcon
         {
             Icon = _icons.TrayFor(null),
-            Text = "电池充电助手 · 正在检测",
+            Text = T("TrayMode", T("AppName"), T("Detecting")),
             ContextMenuStrip = _trayMenu,
             Visible = true
         };
         _tray.DoubleClick += (_, _) => ShowWindow();
+        ApplyLanguage();
+        _languagePicker.SelectedIndexChanged += async (_, _) =>
+        {
+            if (!_updatingLanguage && _languagePicker.SelectedItem is LanguageChoice choice)
+                await SwitchLanguageAsync(choice.Language);
+        };
 
         _apply.Click += async (_, _) =>
         {
@@ -109,6 +122,7 @@ internal sealed class MainForm : Form
         var layout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
+            AutoScroll = true,
             Padding = new Padding(22),
             ColumnCount = 1,
             RowCount = 9
@@ -118,12 +132,21 @@ internal sealed class MainForm : Form
             layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-        var title = TextLabel("电池充电助手");
+        var title = Localized(TextLabel(""), "AppName");
         title.Font = new Font(Font.FontFamily, 19, FontStyle.Bold);
         title.ForeColor = Color.FromArgb(27, 43, 65);
         title.Margin = new Padding(0, 0, 0, 7);
-        layout.Controls.Add(title, 0, 0);
-        layout.Controls.Add(TextLabel("选择充电策略，查看设备的实际状态。"), 0, 1);
+        var header = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Top, ColumnCount = 3, RowCount = 1 };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        header.Controls.Add(title, 0, 0);
+        header.Controls.Add(Localized(TextLabel(""), "Language"), 1, 0);
+        _languagePicker.Items.Add(new LanguageChoice("zh-CN", "简体中文"));
+        _languagePicker.Items.Add(new LanguageChoice("en-US", "English"));
+        header.Controls.Add(_languagePicker, 2, 0);
+        layout.Controls.Add(header, 0, 0);
+        layout.Controls.Add(Hint("Intro"), 0, 1);
 
         var modePanel = new FlowLayoutPanel
         {
@@ -137,12 +160,12 @@ internal sealed class MainForm : Form
             _modePicker.Items.Add(new ModeChoice(mode));
         _modePicker.SelectedIndex = 0;
         modePanel.Controls.Add(_modeState);
-        var selectRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false };
+        var selectRow = new FlowLayoutPanel { AutoSize = true, WrapContents = true };
         selectRow.Controls.Add(_modePicker);
-        selectRow.Controls.Add(_apply);
+        selectRow.Controls.Add(Localized(_apply, "ApplyMode"));
         modePanel.Controls.Add(selectRow);
-        modePanel.Controls.Add(TextLabel("养护模式的充电上限由设备决定，不能自定义百分比。"));
-        layout.Controls.Add(Card("充电模式", modePanel), 0, 2);
+        modePanel.Controls.Add(Hint("ConservationHint"));
+        layout.Controls.Add(Localized(Card("", modePanel), "ChargeMode"), 0, 2);
 
         var nightPanel = new FlowLayoutPanel
         {
@@ -153,9 +176,9 @@ internal sealed class MainForm : Form
             Padding = new Padding(12)
         };
         nightPanel.Controls.Add(_nightState);
-        nightPanel.Controls.Add(_night);
-        nightPanel.Controls.Add(TextLabel("夜间先充到 80%，早晨再补满；具体安排由设备决定。"));
-        layout.Controls.Add(Card("夜间充电", nightPanel), 0, 3);
+        nightPanel.Controls.Add(Localized(_night, "NightToggle"));
+        nightPanel.Controls.Add(Hint("NightHint"));
+        layout.Controls.Add(Localized(Card("", nightPanel), "NightCharge"), 0, 3);
 
         var startupPanel = new FlowLayoutPanel
         {
@@ -166,9 +189,9 @@ internal sealed class MainForm : Form
             Padding = new Padding(12)
         };
         _startupInfo.MaximumSize = new Size(470, 0);
-        startupPanel.Controls.Add(_startup);
+        startupPanel.Controls.Add(Localized(_startup, "StartupToggle"));
         startupPanel.Controls.Add(_startupInfo);
-        layout.Controls.Add(Card("启动设置", startupPanel), 0, 4);
+        layout.Controls.Add(Localized(Card("", startupPanel), "StartupSettings"), 0, 4);
 
         var summary = new FlowLayoutPanel
         {
@@ -181,12 +204,12 @@ internal sealed class MainForm : Form
         summary.Controls.Add(_lastRead);
         layout.Controls.Add(summary, 0, 5);
 
-        var actions = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = false };
-        actions.Controls.Add(_refresh);
-        var hide = new Button { Text = "收起到托盘", AutoSize = true };
+        var actions = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = true };
+        actions.Controls.Add(Localized(_refresh, "Refresh"));
+        var hide = Localized(new Button { AutoSize = true }, "Hide");
         hide.Click += (_, _) => Hide();
         actions.Controls.Add(hide);
-        var quit = new Button { Text = "退出", AutoSize = true };
+        var quit = Localized(new Button { AutoSize = true }, "Quit");
         quit.Click += (_, _) => Quit();
         actions.Controls.Add(quit);
         layout.Controls.Add(actions, 0, 6);
@@ -200,7 +223,7 @@ internal sealed class MainForm : Form
 
     private void BuildTrayMenu()
     {
-        var open = new ToolStripMenuItem("打开电池充电助手");
+        var open = LocalizedMenu(new ToolStripMenuItem(), "Open");
         open.Click += (_, _) => ShowWindow();
         _trayMenu.Items.Add(open);
         _trayMenu.Items.Add(new ToolStripSeparator());
@@ -214,13 +237,137 @@ internal sealed class MainForm : Form
 
         _nightItem.Click += async (_, _) => await ToggleNightAsync();
         _trayMenu.Items.Add(new ToolStripSeparator());
-        _trayMenu.Items.Add(_nightItem);
+        _trayMenu.Items.Add(LocalizedMenu(_nightItem, "NightToggle"));
         _startupItem.Click += async (_, _) => await ToggleStartupAsync();
-        _trayMenu.Items.Add(_startupItem);
+        _trayMenu.Items.Add(LocalizedMenu(_startupItem, "StartupToggle"));
+        foreach (var choice in _languagePicker.Items.Cast<LanguageChoice>())
+        {
+            var item = new ToolStripMenuItem(choice.DisplayName);
+            item.Click += async (_, _) => await SwitchLanguageAsync(choice.Language);
+            _languageItems.Add(choice.Language, item);
+            _languageMenu.DropDownItems.Add(item);
+        }
+        _trayMenu.Items.Add(LocalizedMenu(_languageMenu, "LanguageMenu"));
         _refreshItem.Click += async (_, _) => await RefreshAsync();
-        _trayMenu.Items.Add(_refreshItem);
+        _trayMenu.Items.Add(LocalizedMenu(_refreshItem, "Refresh"));
         _quitItem.Click += (_, _) => Quit();
-        _trayMenu.Items.Add(_quitItem);
+        _trayMenu.Items.Add(LocalizedMenu(_quitItem, "Quit"));
+    }
+
+    private async Task SwitchLanguageAsync(string language)
+    {
+        if (_busy || _startupBusy || _languageBusy || language == UiText.Language)
+        {
+            SelectCurrentLanguage();
+            return;
+        }
+        _languageBusy = true;
+        UpdateEnabledState();
+        var selectedMode = (_modePicker.SelectedItem as ModeChoice)?.Mode;
+        var changed = false;
+        try
+        {
+            await Task.Run(() => LanguagePreferences.Save(LanguagePreferences.SettingsPath, language));
+            UiText.SetLanguage(language);
+            ApplyLanguage();
+            changed = true;
+        }
+        catch (Exception error)
+        {
+            SelectCurrentLanguage();
+            MessageBox.Show(this, T("LanguageSaveFailed", error.Message), T("AppName"),
+                MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            _languageBusy = false;
+            UpdateEnabledState();
+        }
+        // Re-read localized driver errors; this only queries the device and startup task.
+        if (changed)
+        {
+            await RefreshAsync();
+            if (selectedMode.HasValue)
+                _modePicker.SelectedItem = _modePicker.Items.Cast<ModeChoice>()
+                    .Single(choice => choice.Mode == selectedMode.Value);
+        }
+    }
+
+    private void SelectCurrentLanguage()
+    {
+        _updatingLanguage = true;
+        try
+        {
+            _languagePicker.SelectedItem = _languagePicker.Items.Cast<LanguageChoice>()
+                .Single(choice => choice.Language == UiText.Language);
+            foreach (var pair in _languageItems)
+                pair.Value.Checked = pair.Key == UiText.Language;
+        }
+        finally
+        {
+            _updatingLanguage = false;
+        }
+    }
+
+    private void ApplyLanguage()
+    {
+        SuspendLayout();
+        try
+        {
+            Text = T("AppName");
+            foreach (var (control, key) in _localizedControls)
+                control.Text = T(key);
+            foreach (var (item, key) in _localizedMenus)
+                item.Text = T(key);
+            var selected = (_modePicker.SelectedItem as ModeChoice)?.Mode;
+            _modePicker.Items.Clear();
+            foreach (var mode in Enum.GetValues<ChargeMode>())
+            {
+                var choice = new ModeChoice(mode);
+                _modePicker.Items.Add(choice);
+                _modeItems[mode].Text = ModeName(mode);
+                if (mode == selected)
+                    _modePicker.SelectedItem = choice;
+            }
+            if (_modePicker.SelectedIndex < 0)
+                _modePicker.SelectedIndex = 0;
+            SelectCurrentLanguage();
+            _status.Text = T("ReadingDevice");
+            _startupInfo.Text = T("ReadingStartup");
+            if (_snapshot is not null)
+                RenderSnapshot(updateSelection: false);
+            else
+            {
+                _modeState.Text = T("Detecting");
+                _nightState.Text = T("Detecting");
+                _tray.Text = T("TrayMode", T("AppName"), T("Detecting"));
+            }
+        }
+        finally
+        {
+            ResumeLayout(performLayout: true);
+        }
+    }
+
+    private TControl Localized<TControl>(TControl control, string key) where TControl : Control
+    {
+        _localizedControls.Add((control, key));
+        control.Text = T(key);
+        return control;
+    }
+
+    private ToolStripMenuItem LocalizedMenu(ToolStripMenuItem item, string key)
+    {
+        _localizedMenus.Add((item, key));
+        item.Text = T(key);
+        return item;
+    }
+
+    private Label Hint(string key)
+    {
+        var label = Localized(TextLabel(""), key);
+        label.MaximumSize = new Size(440, 0);
+        return label;
     }
 
     private Task RefreshAsync() => PerformAsync(async () =>
@@ -228,14 +375,14 @@ internal sealed class MainForm : Form
         await RefreshStartupAsync();
         await LoadSnapshotAsync();
         return _snapshot is { Mode.IsAvailable: true, NightCharge.IsAvailable: true }
-            ? "状态已更新。"
-            : "状态已更新；部分功能不可用，请查看下方说明。";
+            ? T("StatusUpdated")
+            : T("StatusPartial");
     }, refreshAfter: false);
 
     private Task ApplyModeAsync(ChargeMode mode) => PerformAsync(async () =>
     {
         var actual = await _controller.SetModeAsync(mode);
-        return $"已切换到{ModeName(actual)}，并确认设备状态。";
+        return T("ModeApplied", ModeName(actual));
     });
 
     private Task ToggleNightAsync()
@@ -246,7 +393,7 @@ internal sealed class MainForm : Form
         return PerformAsync(async () =>
         {
             var actual = await _controller.SetNightChargeAsync(!current);
-            return $"夜间充电已{(actual ? "开启" : "关闭")}，并确认设备状态。";
+            return T("NightApplied", T(actual ? "Enabled" : "Disabled"));
         });
     }
 
@@ -261,8 +408,8 @@ internal sealed class MainForm : Form
             _startupEnabled = null;
             _startup.Checked = false;
             _startupItem.Checked = false;
-            _startupItem.Text = "开启自动启动（状态未知）";
-            _startupInfo.Text = $"自动启动状态读取失败：{error.Message}";
+            _startupItem.Text = T("StartupUnknown");
+            _startupInfo.Text = T("StartupReadFailed", error.Message);
             _startupInfo.ForeColor = Color.FromArgb(174, 49, 49);
         }
     }
@@ -273,35 +420,35 @@ internal sealed class MainForm : Form
         _startupEnabled = enabled;
         _startup.Checked = enabled;
         _startupItem.Checked = enabled;
-        _startupItem.Text = "开机自动启动";
+        _startupItem.Text = T("StartupToggle");
         _startupInfo.Text = enabled && !registration.UsesCurrentPath
-            ? "已开启，但程序位置已变化；请关闭后重新开启以更新路径。"
+            ? T("StartupMoved")
             : enabled
-                ? "已开启：登录后自动运行并收起到托盘。移动程序后请重新开启。"
-                : "已关闭：登录后不会自动启动。";
+                ? T("StartupOn")
+                : T("StartupOff");
         _startupInfo.ForeColor = Color.FromArgb(69, 85, 105);
     }
 
     private async Task ToggleStartupAsync()
     {
-        if (_busy || _startupBusy)
+        if (_busy || _startupBusy || _languageBusy)
             return;
         var enabled = _startupEnabled != true;
         _startupBusy = true;
         UpdateEnabledState();
-        _startupInfo.Text = "正在更新自动启动设置…";
+        _startupInfo.Text = T("StartupUpdating");
         try
         {
             await Task.Run(() => _startupManager.SetEnabled(enabled));
             var actual = await Task.Run(_startupManager.Read);
             if (actual.Enabled != enabled || (enabled && !actual.UsesCurrentPath))
-                throw new IOException("自动启动设置未生效，请刷新后重试。");
+                throw new IOException(T("StartupNotApplied"));
             SetStartupState(actual);
         }
         catch (Exception error)
         {
             await RefreshStartupAsync();
-            _startupInfo.Text = $"自动启动设置未完成：{error.Message}";
+            _startupInfo.Text = T("StartupWriteFailed", error.Message);
             _startupInfo.ForeColor = Color.FromArgb(174, 49, 49);
             if (!Visible)
                 ShowWindow();
@@ -315,12 +462,12 @@ internal sealed class MainForm : Form
 
     private async Task PerformAsync(Func<Task<string>> operation, bool refreshAfter = true)
     {
-        if (_busy || _startupBusy)
+        if (_busy || _startupBusy || _languageBusy)
             return;
 
         _busy = true;
         UpdateEnabledState();
-        _status.Text = "正在读取或应用设置，请稍候…";
+        _status.Text = T("Working");
         _status.ForeColor = Color.FromArgb(69, 85, 105);
         try
         {
@@ -340,8 +487,8 @@ internal sealed class MainForm : Form
             }
             catch
             {
-                _modeState.Text = "当前模式：未知，请刷新状态";
-                _nightState.Text = "夜间充电：未知，请刷新状态";
+                _modeState.Text = T("ModeReadUnknown");
+                _nightState.Text = T("NightReadUnknown");
                 _night.Checked = false;
                 foreach (var item in _modeItems.Values)
                     item.Checked = false;
@@ -349,12 +496,12 @@ internal sealed class MainForm : Form
                 UpdateModeIcon(null);
             }
 
-            _status.Text = "操作未完成，请查看下方原因。";
+            _status.Text = T("OperationFailed");
             _status.ForeColor = Color.FromArgb(174, 49, 49);
             _details.Text = error.Message + Environment.NewLine + _details.Text;
             if (!Visible)
             {
-                _tray.ShowBalloonTip(5000, "电池充电助手", "操作未完成，打开窗口查看原因。", ToolTipIcon.Warning);
+                _tray.ShowBalloonTip(5000, T("AppName"), T("FailureBalloon"), ToolTipIcon.Warning);
                 ShowWindow();
             }
         }
@@ -368,38 +515,45 @@ internal sealed class MainForm : Form
     private async Task LoadSnapshotAsync()
     {
         _snapshot = await _controller.ReadAsync();
+        RenderSnapshot();
+    }
+
+    private void RenderSnapshot(bool updateSelection = true)
+    {
+        if (_snapshot is null)
+            return;
         var mode = _snapshot.Mode.Value;
-        _modeState.Text = mode.HasValue ? $"当前模式：{ModeName(mode.Value)}" : "充电模式不可用";
-        if (mode.HasValue)
+        _modeState.Text = mode.HasValue ? T("CurrentMode", ModeName(mode.Value)) : T("ModeUnavailable");
+        if (mode.HasValue && updateSelection)
             _modePicker.SelectedItem = _modePicker.Items.Cast<ModeChoice>().Single(choice => choice.Mode == mode.Value);
 
         var night = _snapshot.NightCharge.Value;
-        _nightState.Text = night.HasValue ? $"当前状态：{(night.Value ? "已开启" : "已关闭")}" : "夜间充电不可用";
+        _nightState.Text = night.HasValue ? T("CurrentState", T(night.Value ? "On" : "Off")) : T("NightUnavailable");
         _night.Checked = night == true;
         _nightItem.Checked = night == true;
         foreach (var pair in _modeItems)
             pair.Value.Checked = mode == pair.Key;
 
-        _lastRead.Text = $"最后读取：{_snapshot.ReadAt:HH:mm:ss}";
+        _lastRead.Text = T("LastRead", _snapshot.ReadAt);
         var power = SystemInformation.PowerStatus;
         var percent = power.BatteryLifePercent;
-        var battery = percent is >= 0 and <= 1 ? $"电量 {percent:P0}" : "电量未知";
+        var battery = percent is >= 0 and <= 1 ? T("BatteryPercent", percent) : T("BatteryUnknown");
         var source = power.PowerLineStatus switch
         {
-            PowerLineStatus.Online => "已接通电源",
-            PowerLineStatus.Offline => "使用电池",
-            _ => "供电状态未知"
+            PowerLineStatus.Online => T("PowerOnline"),
+            PowerLineStatus.Offline => T("PowerOffline"),
+            _ => T("PowerUnknown")
         };
         _powerState.Text = $"{battery} · {source}";
         UpdateModeIcon(mode);
 
         var problems = new List<string>();
         if (_snapshot.Mode.Error is string modeError)
-            problems.Add($"充电模式：{modeError}");
+            problems.Add(T("FeatureProblem", T("ChargeMode"), modeError));
         if (_snapshot.NightCharge.Error is string nightError)
-            problems.Add($"夜间充电：{nightError}");
+            problems.Add(T("FeatureProblem", T("NightCharge"), nightError));
         _details.Text = problems.Count == 0
-            ? "设备状态读取正常。关闭窗口会收起到托盘，使用“退出”结束程序。"
+            ? T("HealthyDetails")
             : string.Join(Environment.NewLine + Environment.NewLine, problems);
     }
 
@@ -407,12 +561,12 @@ internal sealed class MainForm : Form
     {
         Icon = _icons.WindowFor(mode);
         _tray.Icon = _icons.TrayFor(mode);
-        _tray.Text = mode.HasValue ? $"电池充电助手 · {ModeName(mode.Value)}" : "电池充电助手 · 模式未知";
+        _tray.Text = T("TrayMode", T("AppName"), mode.HasValue ? ModeName(mode.Value) : T("TrayUnknown"));
     }
 
     private void UpdateEnabledState()
     {
-        var idle = !_busy && !_startupBusy;
+        var idle = !_busy && !_startupBusy && !_languageBusy;
         var modeAvailable = idle && _snapshot?.Mode.IsAvailable == true;
         _modePicker.Enabled = modeAvailable;
         _apply.Enabled = modeAvailable;
@@ -425,6 +579,8 @@ internal sealed class MainForm : Form
         _refresh.Enabled = idle;
         _refreshItem.Enabled = idle;
         _quitItem.Enabled = idle;
+        _languagePicker.Enabled = idle;
+        _languageMenu.Enabled = idle;
     }
 
     private void ShowWindow()
@@ -436,9 +592,9 @@ internal sealed class MainForm : Form
 
     private void Quit()
     {
-        if (_busy || _startupBusy)
+        if (_busy || _startupBusy || _languageBusy)
         {
-            _status.Text = "请等待当前操作完成后再退出。";
+            _status.Text = T("WaitBeforeQuit");
             ShowWindow();
             return;
         }
@@ -494,13 +650,14 @@ internal sealed class MainForm : Form
         return card;
     }
 
-    private static string ModeName(ChargeMode mode) => mode switch
+    private static string T(string key, params object?[] arguments) => UiText.Get(key, arguments);
+
+    private static string ModeName(ChargeMode mode) => UiText.ModeName(mode);
+
+    private sealed record LanguageChoice(string Language, string DisplayName)
     {
-        ChargeMode.Normal => "普通充电",
-        ChargeMode.Conservation => "电池养护",
-        ChargeMode.RapidCharge => "快速充电",
-        _ => "未知模式"
-    };
+        public override string ToString() => DisplayName;
+    }
 
     private sealed record ModeChoice(ChargeMode Mode)
     {

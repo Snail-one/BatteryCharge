@@ -6,5 +6,6 @@
   <ItemGroup>
     <ProjectReference Include="../../src/BatteryCharge.Core/BatteryCharge.Core.csproj" />
     <Compile Include="../../src/BatteryCharge.App/StartupTaskDefinition.cs" Link="StartupTaskDefinition.cs" />
+    <Compile Include="../../src/BatteryCharge.App/LanguagePreferences.cs" Link="LanguagePreferences.cs" />
   </ItemGroup>
 </Project>

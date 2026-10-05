@@ -28,7 +28,7 @@ internal sealed class ChargeIcons : IDisposable
     {
         using var stream = typeof(ChargeIcons).Assembly.GetManifestResourceStream(
             $"BatteryCharge.App.Assets.BatteryCharge.{name}.ico")
-            ?? throw new InvalidOperationException($"Application icon resource is missing: {name}.");
+            ?? throw new InvalidOperationException(UiText.Get("IconMissing", name));
         using var icon = new Icon(stream, SystemInformation.IconSize);
         return (Icon)icon.Clone();
     }

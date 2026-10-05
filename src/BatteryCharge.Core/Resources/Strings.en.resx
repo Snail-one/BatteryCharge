@@ -1,0 +1,249 @@
+<?xml version='1.0' encoding='utf-8'?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms</value>
+  </resheader>
+  <data xml:space="preserve" name="AppName">
+    <value>Battery Charge</value>
+  </data>
+  <data xml:space="preserve" name="AlreadyRunning">
+    <value>Battery Charge is already running. Open it from the system tray.</value>
+  </data>
+  <data xml:space="preserve" name="Language">
+    <value>Language / 语言</value>
+  </data>
+  <data xml:space="preserve" name="LanguageMenu">
+    <value>Language</value>
+  </data>
+  <data xml:space="preserve" name="LanguageSaveFailed">
+    <value>Could not save the language setting: {0}</value>
+  </data>
+  <data xml:space="preserve" name="ApplyMode">
+    <value>Apply mode</value>
+  </data>
+  <data xml:space="preserve" name="NightToggle">
+    <value>Night charging</value>
+  </data>
+  <data xml:space="preserve" name="StartupToggle">
+    <value>Start automatically</value>
+  </data>
+  <data xml:space="preserve" name="Refresh">
+    <value>Refresh</value>
+  </data>
+  <data xml:space="preserve" name="Hide">
+    <value>Hide to tray</value>
+  </data>
+  <data xml:space="preserve" name="Quit">
+    <value>Exit</value>
+  </data>
+  <data xml:space="preserve" name="Open">
+    <value>Open Battery Charge</value>
+  </data>
+  <data xml:space="preserve" name="Intro">
+    <value>Choose a charging mode and view the actual device state.</value>
+  </data>
+  <data xml:space="preserve" name="ChargeMode">
+    <value>Charging mode</value>
+  </data>
+  <data xml:space="preserve" name="NightCharge">
+    <value>Night charging</value>
+  </data>
+  <data xml:space="preserve" name="StartupSettings">
+    <value>Startup</value>
+  </data>
+  <data xml:space="preserve" name="ConservationHint">
+    <value>The device sets the conservation charge limit. A custom percentage is not available.</value>
+  </data>
+  <data xml:space="preserve" name="NightHint">
+    <value>Charges to 80% overnight, then tops up in the morning. The device determines the schedule.</value>
+  </data>
+  <data xml:space="preserve" name="Detecting">
+    <value>Detecting…</value>
+  </data>
+  <data xml:space="preserve" name="ReadingDevice">
+    <value>Reading device state…</value>
+  </data>
+  <data xml:space="preserve" name="ReadingStartup">
+    <value>Reading startup settings…</value>
+  </data>
+  <data xml:space="preserve" name="StatusUpdated">
+    <value>State updated.</value>
+  </data>
+  <data xml:space="preserve" name="StatusPartial">
+    <value>State updated. Some features are unavailable; see the details below.</value>
+  </data>
+  <data xml:space="preserve" name="ModeApplied">
+    <value>Switched to {0} and verified the device state.</value>
+  </data>
+  <data xml:space="preserve" name="NightApplied">
+    <value>Night charging {0}; device state verified.</value>
+  </data>
+  <data xml:space="preserve" name="Enabled">
+    <value>enabled</value>
+  </data>
+  <data xml:space="preserve" name="Disabled">
+    <value>disabled</value>
+  </data>
+  <data xml:space="preserve" name="On">
+    <value>On</value>
+  </data>
+  <data xml:space="preserve" name="Off">
+    <value>Off</value>
+  </data>
+  <data xml:space="preserve" name="StartupUnknown">
+    <value>Enable startup (state unknown)</value>
+  </data>
+  <data xml:space="preserve" name="StartupReadFailed">
+    <value>Could not read startup settings: {0}</value>
+  </data>
+  <data xml:space="preserve" name="StartupMoved">
+    <value>Enabled, but the app has moved. Turn startup off and on again to update its path.</value>
+  </data>
+  <data xml:space="preserve" name="StartupOn">
+    <value>Enabled: starts in the tray after sign-in. If you move the app, turn startup off and on again.</value>
+  </data>
+  <data xml:space="preserve" name="StartupOff">
+    <value>Disabled: the app will not start automatically after sign-in.</value>
+  </data>
+  <data xml:space="preserve" name="StartupUpdating">
+    <value>Updating startup settings…</value>
+  </data>
+  <data xml:space="preserve" name="StartupNotApplied">
+    <value>The startup setting did not take effect. Refresh and try again.</value>
+  </data>
+  <data xml:space="preserve" name="StartupWriteFailed">
+    <value>Could not update startup settings: {0}</value>
+  </data>
+  <data xml:space="preserve" name="Working">
+    <value>Reading or applying settings. Please wait…</value>
+  </data>
+  <data xml:space="preserve" name="ModeReadUnknown">
+    <value>Current mode: unknown. Please refresh.</value>
+  </data>
+  <data xml:space="preserve" name="NightReadUnknown">
+    <value>Night charging: unknown. Please refresh.</value>
+  </data>
+  <data xml:space="preserve" name="OperationFailed">
+    <value>The operation failed. See the details below.</value>
+  </data>
+  <data xml:space="preserve" name="FailureBalloon">
+    <value>The operation failed. Open the window for details.</value>
+  </data>
+  <data xml:space="preserve" name="CurrentMode">
+    <value>Current mode: {0}</value>
+  </data>
+  <data xml:space="preserve" name="ModeUnavailable">
+    <value>Charging mode unavailable</value>
+  </data>
+  <data xml:space="preserve" name="CurrentState">
+    <value>Current state: {0}</value>
+  </data>
+  <data xml:space="preserve" name="NightUnavailable">
+    <value>Night charging unavailable</value>
+  </data>
+  <data xml:space="preserve" name="LastRead">
+    <value>Last read: {0:HH:mm:ss}</value>
+  </data>
+  <data xml:space="preserve" name="BatteryPercent">
+    <value>Battery {0:P0}</value>
+  </data>
+  <data xml:space="preserve" name="BatteryUnknown">
+    <value>Battery level unknown</value>
+  </data>
+  <data xml:space="preserve" name="PowerOnline">
+    <value>Plugged in</value>
+  </data>
+  <data xml:space="preserve" name="PowerOffline">
+    <value>On battery</value>
+  </data>
+  <data xml:space="preserve" name="PowerUnknown">
+    <value>Power source unknown</value>
+  </data>
+  <data xml:space="preserve" name="FeatureProblem">
+    <value>{0}: {1}</value>
+  </data>
+  <data xml:space="preserve" name="HealthyDetails">
+    <value>Device state read successfully. Closing the window hides it to the tray. Use Exit to quit.</value>
+  </data>
+  <data xml:space="preserve" name="TrayMode">
+    <value>{0} · {1}</value>
+  </data>
+  <data xml:space="preserve" name="TrayUnknown">
+    <value>Mode unknown</value>
+  </data>
+  <data xml:space="preserve" name="WaitBeforeQuit">
+    <value>Please wait for the current operation to finish before exiting.</value>
+  </data>
+  <data xml:space="preserve" name="ModeNormal">
+    <value>Normal charging</value>
+  </data>
+  <data xml:space="preserve" name="ModeConservation">
+    <value>Conservation</value>
+  </data>
+  <data xml:space="preserve" name="ModeRapid">
+    <value>Rapid charging</value>
+  </data>
+  <data xml:space="preserve" name="ModeUnknown">
+    <value>Unknown mode</value>
+  </data>
+  <data xml:space="preserve" name="CurrentUserMissing">
+    <value>Could not identify the current Windows user.</value>
+  </data>
+  <data xml:space="preserve" name="ExecutableMissing">
+    <value>Could not determine the application path.</value>
+  </data>
+  <data xml:space="preserve" name="UsePublishedExecutable">
+    <value>Use BatteryCharge.exe from the publish folder to enable automatic startup.</value>
+  </data>
+  <data xml:space="preserve" name="SchedulerUnavailable">
+    <value>Could not connect to Windows Task Scheduler.</value>
+  </data>
+  <data xml:space="preserve" name="ForeignStartupTask">
+    <value>The existing task does not belong to Battery Charge for this user. It has not been modified.</value>
+  </data>
+  <data xml:space="preserve" name="StartupTaskDescription">
+    <value>Battery Charge: start in the system tray after user sign-in.</value>
+  </data>
+  <data xml:space="preserve" name="IconMissing">
+    <value>Application icon resource is missing: {0}.</value>
+  </data>
+  <data xml:space="preserve" name="OpenDevice">
+    <value>Opening the battery control device</value>
+  </data>
+  <data xml:space="preserve" name="AccessDevice">
+    <value>Accessing the battery control device (0x{0:X8})</value>
+  </data>
+  <data xml:space="preserve" name="InvalidReply">
+    <value>The device returned an invalid response length: {0} bytes; expected 4.</value>
+  </data>
+  <data xml:space="preserve" name="DriverMissing">
+    <value>The Lenovo battery control driver was not found, or this model does not provide the device.</value>
+  </data>
+  <data xml:space="preserve" name="DriverAccessDenied">
+    <value>Access denied. Run the application as administrator.</value>
+  </data>
+  <data xml:space="preserve" name="DriverUnsupported">
+    <value>The driver does not support this operation.</value>
+  </data>
+  <data xml:space="preserve" name="DriverCheck">
+    <value>Check the Lenovo driver and device state.</value>
+  </data>
+  <data xml:space="preserve" name="DriverFailure">
+    <value>{0} failed: {1} (error {2})</value>
+  </data>
+  <data xml:space="preserve" name="InvalidNightState">
+    <value>The device did not report a valid night charging state (0x{0:X8}).</value>
+  </data>
+  <data xml:space="preserve" name="VerificationFailed">
+    <value>{0} did not take effect. Expected: {1}; actual: {2}. Refresh and try again.</value>
+  </data>
+</root>
