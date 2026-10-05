@@ -4,6 +4,9 @@ using System.Xml.Linq;
 using System.Globalization;
 using System.Drawing;
 using System.Runtime.InteropServices;
+using System.Collections;
+using System.Resources;
+using System.Text.RegularExpressions;
 
 // Dependency-free behavioral checks: no device access, test SDK, or test packages.
 var checks = new (string Name, Func<Task> Run)[]
@@ -33,7 +36,9 @@ var checks = new (string Name, Func<Task> Run)[]
     ("Cleanup removes only app settings and recognized temporary files", CleanupPreservesOtherFiles),
     ("Startup removal failure preserves configuration for retry", CleanupTaskFailure),
     ("Configuration deletion failure is reported and preserves remaining files", CleanupFileFailure),
-    ("Window bounds fit small screens, scaled displays and disconnected monitors", AdaptiveWindowBounds)
+    ("Window bounds fit small screens, scaled displays and disconnected monitors", AdaptiveWindowBounds),
+    ("Fluent UI resources have matching keys and format arguments in both languages", FluentResourceCoverage),
+    ("Light and dark palettes keep body text readable on their surfaces", FluentPaletteContrast)
 };
 
 var failures = 0;
@@ -84,6 +89,59 @@ static void Assert(bool condition, string message)
 {
     if (!condition)
         throw new InvalidOperationException(message);
+}
+
+static Task FluentResourceCoverage()
+{
+    var resources = new ResourceManager("BatteryCharge.Core.Resources.Strings", typeof(UiText).Assembly);
+    try
+    {
+        var chinese = resources.GetResourceSet(CultureInfo.InvariantCulture, true, false)!;
+        var english = resources.GetResourceSet(CultureInfo.GetCultureInfo("en"), true, false)!;
+        var chineseKeys = chinese.Cast<DictionaryEntry>().Select(entry => (string)entry.Key).ToHashSet();
+        var englishKeys = english.Cast<DictionaryEntry>().Select(entry => (string)entry.Key).ToHashSet();
+        Assert(chineseKeys.SetEquals(englishKeys), "The two languages must provide exactly the same resource keys.");
+        foreach (var key in chineseKeys)
+        {
+            var zh = chinese.GetString(key)!;
+            var en = english.GetString(key)!;
+            Assert(!string.IsNullOrWhiteSpace(zh) && !string.IsNullOrWhiteSpace(en), $"Empty translation: {key}.");
+            static IEnumerable<string> Arguments(string text) => Regex.Matches(text, @"\{(\d+)(?:,[^}:]+)?(?::[^}]+)?\}")
+                .Select(match => match.Groups[1].Value).Order();
+            Assert(Arguments(zh).SequenceEqual(Arguments(en)), $"Translation lost a format argument: {key}.");
+        }
+    }
+    finally { resources.ReleaseAllResources(); }
+    return Task.CompletedTask;
+}
+
+static Task FluentPaletteContrast()
+{
+    static double Luminance(Color color)
+    {
+        static double Linear(byte component)
+        {
+            var value = component / 255d;
+            return value <= .04045 ? value / 12.92 : Math.Pow((value + .055) / 1.055, 2.4);
+        }
+        return .2126 * Linear(color.R) + .7152 * Linear(color.G) + .0722 * Linear(color.B);
+    }
+    foreach (var palette in new[] { FluentPalette.Light, FluentPalette.Dark })
+    {
+        foreach (var (text, background) in new[]
+        {
+            (palette.Text, palette.Background), (palette.Text, palette.Surface),
+            (palette.Secondary, palette.Background), (palette.Secondary, palette.Surface),
+            (palette.Secondary, palette.AccentSoft), (palette.OnAccent, palette.Accent),
+            (palette.Accent, palette.AccentSoft), (palette.Success, palette.Surface), (palette.Error, palette.Surface)
+        })
+        {
+            var a = Luminance(text); var b = Luminance(background);
+            var ratio = (Math.Max(a, b) + .05) / (Math.Min(a, b) + .05);
+            Assert(ratio >= 4.5, $"Insufficient text contrast ({ratio:F2}:1) in {(palette.IsDark ? "dark" : "light")} mode.");
+        }
+    }
+    return Task.CompletedTask;
 }
 
 static async Task Throws<T>(Func<Task> action) where T : Exception

@@ -279,4 +279,79 @@ Cleanup is incomplete. The app will remain open. Resolve the issue and try again
   <data name="CleanupTaskRemains" xml:space="preserve">
     <value>The startup task still exists. Please try again.</value>
   </data>
+  <data name="BrandSubtitle" xml:space="preserve">
+    <value>Lenovo battery controls</value>
+  </data>
+  <data name="TrayHint" xml:space="preserve">
+    <value>Running in the system tray</value>
+  </data>
+  <data name="OverviewNav" xml:space="preserve">
+    <value>Overview</value>
+  </data>
+  <data name="SettingsNav" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+  <data name="OverviewTitle" xml:space="preserve">
+    <value>Battery &amp; charging</value>
+  </data>
+  <data name="OverviewSubtitle" xml:space="preserve">
+    <value>A little care for the battery that keeps you going.</value>
+  </data>
+  <data name="SettingsTitle" xml:space="preserve">
+    <value>App settings</value>
+  </data>
+  <data name="SettingsSubtitle" xml:space="preserve">
+    <value>Make Battery Charge work the way you do.</value>
+  </data>
+  <data name="BatteryLevelLabel" xml:space="preserve">
+    <value>Battery level</value>
+  </data>
+  <data name="BatteryLevelValue" xml:space="preserve">
+    <value>{0:P0}</value>
+  </data>
+  <data name="CurrentModeLabel" xml:space="preserve">
+    <value>Active charging mode</value>
+  </data>
+  <data name="CurrentBadge" xml:space="preserve">
+    <value>Active on device</value>
+  </data>
+  <data name="ModeIntro" xml:space="preserve">
+    <value>Choose a mode, then apply your changes.</value>
+  </data>
+  <data name="ModeNormalDescription" xml:space="preserve">
+    <value>Charge to full with the device’s standard charging policy.</value>
+  </data>
+  <data name="ModeConservationDescription" xml:space="preserve">
+    <value>Limit charging when you keep your laptop plugged in.</value>
+  </data>
+  <data name="ModeRapidDescription" xml:space="preserve">
+    <value>Top up faster when you need to get going.</value>
+  </data>
+  <data name="ModeInUse" xml:space="preserve">
+    <value>The selected mode is already active.</value>
+  </data>
+  <data name="ModeSelectionPending" xml:space="preserve">
+    <value>Ready to apply: {0}</value>
+  </data>
+  <data name="ShowDetails" xml:space="preserve">
+    <value>Show details</value>
+  </data>
+  <data name="HideDetails" xml:space="preserve">
+    <value>Hide details</value>
+  </data>
+  <data name="LanguageHint" xml:space="preserve">
+    <value>Changes apply immediately and are remembered next time.</value>
+  </data>
+  <data name="CleanupTitle" xml:space="preserve">
+    <value>Remove app settings</value>
+  </data>
+  <data name="CleanupHint" xml:space="preserve">
+    <value>Remove startup and saved preferences, then exit. Your charging settings are retained.</value>
+  </data>
+  <data name="TrayBehaviorTitle" xml:space="preserve">
+    <value>Keep running in the tray</value>
+  </data>
+  <data name="TrayBehaviorHint" xml:space="preserve">
+    <value>Closing or minimizing hides the window to the system tray. Open the app again to restore it, or use Exit to quit.</value>
+  </data>
 </root>

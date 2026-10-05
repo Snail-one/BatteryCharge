@@ -2,24 +2,23 @@ using BatteryCharge.Core;
 
 namespace BatteryCharge.App;
 
-internal sealed class MainForm : Form
+internal sealed partial class MainForm : Form
 {
     private readonly ChargeController _controller;
-    private TableLayoutPanel _layout = null!;
     private readonly List<(Control Control, string Key)> _localizedControls = [];
     private readonly List<(ToolStripItem Item, string Key)> _localizedMenus = [];
     private readonly ComboBox _languagePicker = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 115 };
     private readonly ToolStripMenuItem _languageMenu = new();
     private readonly Dictionary<string, ToolStripMenuItem> _languageItems = [];
-    private readonly ComboBox _modePicker = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 235 };
-    private readonly Button _apply = new() { AutoSize = true };
-    private readonly CheckBox _night = new() { AutoSize = true, AutoCheck = false };
-    private readonly CheckBox _startup = new() { AutoSize = true, AutoCheck = false };
-    private readonly Button _cleanup = new() { AutoSize = true };
+    private readonly FluentButton _apply = new() { Kind = FluentButtonKind.Accent };
+    private readonly FluentToggle _night = new();
+    private readonly FluentToggle _startup = new();
+    private readonly FluentButton _cleanup = new() { Kind = FluentButtonKind.Danger };
     private readonly Label _startupInfo = TextLabel(T("ReadingStartup"));
-    private readonly StartupManager _startupManager = new();
+    private readonly IStartupManager _startupManager;
+    private readonly string _preferencesPath;
     private readonly ChargeIcons _icons = new();
-    private readonly Button _refresh = new() { AutoSize = true };
+    private readonly FluentButton _refresh = new() { Kind = FluentButtonKind.Standard, Glyph = FluentGlyph.Refresh };
     private readonly Label _modeState = TextLabel(T("Detecting"));
     private readonly Label _nightState = TextLabel(T("Detecting"));
     private readonly Label _powerState = TextLabel("");
@@ -53,18 +52,21 @@ internal sealed class MainForm : Form
     private bool _busy;
     private bool _quitting;
 
-    public MainForm(ChargeController controller, bool startInTray = false)
+    public MainForm(ChargeController controller, bool startInTray = false,
+        IStartupManager? startupManager = null, string? preferencesPath = null)
     {
         SuspendLayout();
         _controller = controller;
+        _startupManager = startupManager ?? new StartupManager();
+        _preferencesPath = preferencesPath ?? LanguagePreferences.SettingsPath;
         _startInTray = startInTray;
         Text = T("AppName");
         Icon = _icons.WindowFor(null);
         StartPosition = FormStartPosition.CenterScreen;
         AutoScaleDimensions = new SizeF(96, 96);
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(590, 780);
-        BackColor = Color.FromArgb(247, 249, 252);
+        ClientSize = new Size(1020, 760);
+        BackColor = FluentPalette.Light.Background;
 
         BuildWindow();
         BuildTrayMenu();
@@ -83,11 +85,7 @@ internal sealed class MainForm : Form
                 await SwitchLanguageAsync(choice.Language);
         };
 
-        _apply.Click += async (_, _) =>
-        {
-            if (_modePicker.SelectedItem is ModeChoice choice)
-                await ApplyModeAsync(choice.Mode);
-        };
+        _apply.Click += async (_, _) => await ApplyModeAsync(_selectedMode);
         _night.Click += async (_, _) => await ToggleNightAsync();
         _startup.Click += async (_, _) => await ToggleStartupAsync();
         _cleanup.Click += async (_, _) => await CleanupAndExitAsync();
@@ -123,75 +121,7 @@ internal sealed class MainForm : Form
         _initialized = true;
         await RefreshAsync();
         if (!IsDisposed)
-            FitWindowToScreen(fitContent: true);
-    }
-
-    private void BuildWindow()
-    {
-        var layout = _layout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            AutoScroll = true,
-            Padding = new Padding(22),
-            ColumnCount = 1,
-            RowCount = 9
-        };
-        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (var row = 0; row < 8; row++)
-            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
-        var title = Localized(TextLabel(""), "AppName");
-        title.Font = new Font(Font.FontFamily, 19, FontStyle.Bold);
-        title.ForeColor = Color.FromArgb(27, 43, 65);
-        title.Margin = new Padding(0, 0, 0, 7);
-        var header = new TableLayoutPanel { AutoSize = true, Dock = DockStyle.Top, ColumnCount = 3, RowCount = 1 };
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        header.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        header.Controls.Add(title, 0, 0);
-        header.Controls.Add(Localized(TextLabel(""), "Language"), 1, 0);
-        _languagePicker.Items.Add(new LanguageChoice("zh-CN", "简体中文"));
-        _languagePicker.Items.Add(new LanguageChoice("en-US", "English"));
-        header.Controls.Add(_languagePicker, 2, 0);
-        layout.Controls.Add(header, 0, 0);
-        layout.Controls.Add(Hint("Intro"), 0, 1);
-
-        foreach (var mode in Enum.GetValues<ChargeMode>())
-            _modePicker.Items.Add(new ModeChoice(mode));
-        _modePicker.SelectedIndex = 0;
-        var selectRow = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = true };
-        selectRow.Controls.Add(_modePicker);
-        selectRow.Controls.Add(Localized(_apply, "ApplyMode"));
-        var modePanel = VerticalPanel(12, _modeState, selectRow, Hint("ConservationHint"));
-        layout.Controls.Add(Localized(Card("", modePanel), "ChargeMode"), 0, 2);
-
-        var nightPanel = VerticalPanel(12, _nightState,
-            Localized(_night, "NightToggle"), Hint("NightHint"));
-        layout.Controls.Add(Localized(Card("", nightPanel), "NightCharge"), 0, 3);
-
-        var startupPanel = VerticalPanel(12, Localized(_startup, "StartupToggle"),
-            _startupInfo, Localized(_cleanup, "Cleanup"));
-        layout.Controls.Add(Localized(Card("", startupPanel), "StartupSettings"), 0, 4);
-
-        var summary = VerticalPanel(0, _powerState, _lastRead);
-        layout.Controls.Add(summary, 0, 5);
-
-        var actions = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Top, WrapContents = true };
-        actions.Controls.Add(Localized(_refresh, "Refresh"));
-        var hide = Localized(new Button { AutoSize = true }, "Hide");
-        hide.Click += (_, _) => Hide();
-        actions.Controls.Add(hide);
-        var quit = Localized(new Button { AutoSize = true }, "Quit");
-        quit.Click += (_, _) => Quit();
-        actions.Controls.Add(quit);
-        layout.Controls.Add(actions, 0, 6);
-
-        _status.Margin = new Padding(0, 8, 0, 8);
-        layout.Controls.Add(_status, 0, 7);
-        _details.MinimumSize = new Size(0, 100);
-        layout.Controls.Add(_details, 0, 8);
-        Controls.Add(layout);
+            FitWindowToScreen();
     }
 
     private void BuildTrayMenu()
@@ -239,11 +169,11 @@ internal sealed class MainForm : Form
         }
         _languageBusy = true;
         UpdateEnabledState();
-        var selectedMode = (_modePicker.SelectedItem as ModeChoice)?.Mode;
+        var selectedMode = _selectedMode;
         var changed = false;
         try
         {
-            await Task.Run(() => LanguagePreferences.Save(LanguagePreferences.SettingsPath, language));
+            await Task.Run(() => LanguagePreferences.Save(_preferencesPath, language));
             UiText.SetLanguage(language);
             ApplyLanguage();
             changed = true;
@@ -263,9 +193,7 @@ internal sealed class MainForm : Form
         if (changed)
         {
             await RefreshAsync();
-            if (selectedMode.HasValue)
-                _modePicker.SelectedItem = _modePicker.Items.Cast<ModeChoice>()
-                    .Single(choice => choice.Mode == selectedMode.Value);
+            SelectMode(selectedMode);
         }
     }
 
@@ -295,21 +223,31 @@ internal sealed class MainForm : Form
                 control.Text = T(key);
             foreach (var (item, key) in _localizedMenus)
                 item.Text = T(key);
-            var selected = (_modePicker.SelectedItem as ModeChoice)?.Mode;
-            _modePicker.Items.Clear();
-            foreach (var mode in Enum.GetValues<ChargeMode>())
+            foreach (var pair in _modeCards)
             {
-                var choice = new ModeChoice(mode);
-                _modePicker.Items.Add(choice);
-                _modeItems[mode].Text = ModeName(mode);
-                if (mode == selected)
-                    _modePicker.SelectedItem = choice;
+                pair.Value.Text = ModeName(pair.Key);
+                pair.Value.Description = T(pair.Key switch
+                {
+                    ChargeMode.Conservation => "ModeConservationDescription",
+                    ChargeMode.RapidCharge => "ModeRapidDescription",
+                    _ => "ModeNormalDescription"
+                });
+                pair.Value.CurrentText = T("CurrentBadge");
+                pair.Value.AccessibleDescription = pair.Value.Description
+                    + (pair.Value.IsCurrent ? " " + pair.Value.CurrentText : "");
+                pair.Value.Invalidate();
+                _modeItems[pair.Key].Text = ModeName(pair.Key);
             }
-            if (_modePicker.SelectedIndex < 0)
-                _modePicker.SelectedIndex = 0;
+            _night.Text = _night.AccessibleName = T("NightToggle");
+            _startup.Text = _startup.AccessibleName = T("StartupToggle");
+            _languagePicker.AccessibleName = T("LanguageMenu");
+            _details.AccessibleName = T("ShowDetails");
+            _detailsButton.Text = T(_diagnostics.Visible ? "HideDetails" : "ShowDetails");
+            SetPage(_settingsVisible);
+            RenderPower();
             SelectCurrentLanguage();
-            _status.Text = T("ReadingDevice");
-            _startupInfo.Text = T("ReadingStartup");
+            SetStatus(T("ReadingDevice"));
+            SetStartupInfo(T("ReadingStartup"));
             if (_snapshot is not null)
                 RenderSnapshot(updateSelection: false);
             else
@@ -324,7 +262,7 @@ internal sealed class MainForm : Form
             ResumeLayout(performLayout: true);
         }
         if (IsHandleCreated)
-            FitWindowToScreen(fitContent: true);
+            FitWindowToScreen();
     }
 
     private TControl Localized<TControl>(TControl control, string key) where TControl : Control
@@ -340,8 +278,6 @@ internal sealed class MainForm : Form
         item.Text = T(key);
         return item;
     }
-
-    private Label Hint(string key) => Localized(TextLabel(""), key);
 
     private Task RefreshAsync() => PerformAsync(async () =>
     {
@@ -382,8 +318,7 @@ internal sealed class MainForm : Form
             _startup.Checked = false;
             _startupItem.Checked = false;
             _startupItem.Text = T("StartupUnknown");
-            _startupInfo.Text = T("StartupReadFailed", error.Message);
-            _startupInfo.ForeColor = Color.FromArgb(174, 49, 49);
+            SetStartupInfo(T("StartupReadFailed", error.Message), error: true);
         }
     }
 
@@ -394,12 +329,8 @@ internal sealed class MainForm : Form
         _startup.Checked = enabled;
         _startupItem.Checked = enabled;
         _startupItem.Text = T("StartupToggle");
-        _startupInfo.Text = enabled && !registration.UsesCurrentPath
-            ? T("StartupMoved")
-            : enabled
-                ? T("StartupOn")
-                : T("StartupOff");
-        _startupInfo.ForeColor = Color.FromArgb(69, 85, 105);
+        SetStartupInfo(enabled && !registration.UsesCurrentPath
+            ? T("StartupMoved") : T(enabled ? "StartupOn" : "StartupOff"));
     }
 
     private async Task ToggleStartupAsync()
@@ -409,7 +340,7 @@ internal sealed class MainForm : Form
         var enabled = _startupEnabled != true;
         _startupBusy = true;
         UpdateEnabledState();
-        _startupInfo.Text = T("StartupUpdating");
+        SetStartupInfo(T("StartupUpdating"));
         try
         {
             await Task.Run(() => _startupManager.SetEnabled(enabled));
@@ -421,8 +352,7 @@ internal sealed class MainForm : Form
         catch (Exception error)
         {
             await RefreshStartupAsync();
-            _startupInfo.Text = T("StartupWriteFailed", error.Message);
-            _startupInfo.ForeColor = Color.FromArgb(174, 49, 49);
+            SetStartupInfo(T("StartupWriteFailed", error.Message), error: true);
             if (!Visible)
                 ShowWindow();
         }
@@ -447,10 +377,9 @@ internal sealed class MainForm : Form
                 != DialogResult.Yes)
                 return;
 
-            _status.Text = T("CleanupWorking");
-            _status.ForeColor = Color.FromArgb(69, 85, 105);
+            SetStatus(T("CleanupWorking"));
             await Task.Run(() => CleanupService.Run(_startupManager.RemoveForCleanup,
-                LanguagePreferences.SettingsPath, LanguagePreferences.LegacySettingsPath));
+                _preferencesPath, LanguagePreferences.LegacySettingsPath));
             MessageBox.Show(this, T("CleanupComplete"), T("AppName"),
                 MessageBoxButtons.OK, MessageBoxIcon.Information);
             _quitting = true;
@@ -460,8 +389,7 @@ internal sealed class MainForm : Form
         {
             // Reflect task removal even when a later configuration-file deletion failed.
             await RefreshStartupAsync();
-            _status.Text = T("CleanupIncomplete");
-            _status.ForeColor = Color.FromArgb(174, 49, 49);
+            SetStatus(T("CleanupIncomplete"), StatusTone.Error);
             _details.Text = error.Message;
             ShowWindow();
             MessageBox.Show(this, T("CleanupFailed", error.Message), T("AppName"),
@@ -482,15 +410,13 @@ internal sealed class MainForm : Form
 
         _busy = true;
         UpdateEnabledState();
-        _status.Text = T("Working");
-        _status.ForeColor = Color.FromArgb(69, 85, 105);
+        SetStatus(T("Working"));
         try
         {
             var message = await operation();
             if (refreshAfter)
                 await LoadSnapshotAsync();
-            _status.Text = message;
-            _status.ForeColor = Color.FromArgb(25, 110, 70);
+            SetStatus(message, StatusTone.Success);
         }
         catch (Exception error)
         {
@@ -509,10 +435,11 @@ internal sealed class MainForm : Form
                     item.Checked = false;
                 _nightItem.Checked = false;
                 UpdateModeIcon(null);
+                foreach (var card in _modeCards.Values)
+                    card.IsCurrent = false;
             }
 
-            _status.Text = T("OperationFailed");
-            _status.ForeColor = Color.FromArgb(174, 49, 49);
+            SetStatus(T("OperationFailed"), StatusTone.Error);
             _details.Text = error.Message + Environment.NewLine + _details.Text;
             if (!Visible)
             {
@@ -538,9 +465,11 @@ internal sealed class MainForm : Form
         if (_snapshot is null)
             return;
         var mode = _snapshot.Mode.Value;
-        _modeState.Text = mode.HasValue ? T("CurrentMode", ModeName(mode.Value)) : T("ModeUnavailable");
+        _modeState.Text = mode.HasValue ? ModeName(mode.Value) : T("ModeUnavailable");
         if (mode.HasValue && updateSelection)
-            _modePicker.SelectedItem = _modePicker.Items.Cast<ModeChoice>().Single(choice => choice.Mode == mode.Value);
+            SelectMode(mode.Value);
+        foreach (var pair in _modeCards)
+            pair.Value.IsCurrent = pair.Key == mode;
 
         var night = _snapshot.NightCharge.Value;
         _nightState.Text = night.HasValue ? T("CurrentState", T(night.Value ? "On" : "Off")) : T("NightUnavailable");
@@ -550,16 +479,7 @@ internal sealed class MainForm : Form
             pair.Value.Checked = mode == pair.Key;
 
         _lastRead.Text = T("LastRead", _snapshot.ReadAt);
-        var power = SystemInformation.PowerStatus;
-        var percent = power.BatteryLifePercent;
-        var battery = percent is >= 0 and <= 1 ? T("BatteryPercent", percent) : T("BatteryUnknown");
-        var source = power.PowerLineStatus switch
-        {
-            PowerLineStatus.Online => T("PowerOnline"),
-            PowerLineStatus.Offline => T("PowerOffline"),
-            _ => T("PowerUnknown")
-        };
-        _powerState.Text = $"{battery} · {source}";
+        RenderPower();
         UpdateModeIcon(mode);
 
         var problems = new List<string>();
@@ -570,6 +490,11 @@ internal sealed class MainForm : Form
         _details.Text = problems.Count == 0
             ? T("HealthyDetails")
             : string.Join(Environment.NewLine + Environment.NewLine, problems);
+        if (problems.Count > 0)
+        {
+            _diagnostics.Visible = true;
+            _detailsButton.Text = T("HideDetails");
+        }
     }
 
     private void UpdateModeIcon(ChargeMode? mode)
@@ -583,8 +508,11 @@ internal sealed class MainForm : Form
     {
         var idle = !_busy && !_startupBusy && !_languageBusy && !_cleanupBusy;
         var modeAvailable = idle && _snapshot?.Mode.IsAvailable == true;
-        _modePicker.Enabled = modeAvailable;
-        _apply.Enabled = modeAvailable;
+        foreach (var card in _modeCards.Values)
+            card.Enabled = modeAvailable;
+        _apply.Enabled = modeAvailable && _selectedMode != _snapshot?.Mode.Value;
+        _selectionInfo.Text = _snapshot?.Mode.IsAvailable != true ? T("ModeUnavailable")
+            : _selectedMode == _snapshot.Mode.Value ? T("ModeInUse") : T("ModeSelectionPending", ModeName(_selectedMode));
         foreach (var item in _modeItems.Values)
             item.Enabled = modeAvailable;
         _night.Enabled = idle && _snapshot?.NightCharge.IsAvailable == true;
@@ -631,7 +559,7 @@ internal sealed class MainForm : Form
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
-        FitWindowToScreen(fitContent: true);
+        FitWindowToScreen();
     }
 
     protected override void OnDpiChanged(DpiChangedEventArgs e)
@@ -645,31 +573,24 @@ internal sealed class MainForm : Form
         }));
     }
 
-    private void FitWindowToScreen(bool fitContent = false)
+    private void FitWindowToScreen()
     {
         if (WindowState != FormWindowState.Normal)
             return;
 
         var workingArea = Screen.FromControl(this).WorkingArea;
         var scale = DeviceDpi / 96f;
-        MinimumSize = new Size(Math.Min((int)Math.Ceiling(420 * scale), workingArea.Width),
-            Math.Min((int)Math.Ceiling(360 * scale), workingArea.Height));
-        var bounds = Bounds;
-        if (fitContent)
-        {
-            _layout.PerformLayout();
-            var contentHeight = _layout.Padding.Vertical + _layout.GetRowHeights().Take(8).Sum()
-                + _details.MinimumSize.Height + _details.Margin.Vertical;
-            bounds.Height = Math.Max(bounds.Height, contentHeight + Height - ClientSize.Height);
-        }
-        Bounds = WindowBounds.Fit(bounds, workingArea);
+        MinimumSize = new Size(Math.Min((int)Math.Ceiling(640 * scale), workingArea.Width),
+            Math.Min((int)Math.Ceiling(480 * scale), workingArea.Height));
+        Bounds = WindowBounds.Fit(Bounds, workingArea);
+        UpdateResponsiveLayout();
     }
 
     private void Quit()
     {
         if (_busy || _startupBusy || _languageBusy || _cleanupBusy)
         {
-            _status.Text = T("WaitBeforeQuit");
+            SetStatus(T("WaitBeforeQuit"));
             ShowWindow();
             return;
         }
@@ -693,57 +614,18 @@ internal sealed class MainForm : Form
     {
         if (disposing)
         {
+            _powerTimer.Dispose();
             _tray.Visible = false;
             _tray.Dispose();
             _trayMenu.Dispose();
         }
         base.Dispose(disposing);
         if (disposing)
+        {
             _icons.Dispose();
-    }
-
-    private static Label TextLabel(string text) => new()
-    {
-        Text = text,
-        AutoSize = true,
-        Dock = DockStyle.Top,
-        ForeColor = Color.FromArgb(69, 85, 105),
-        Margin = new Padding(0, 3, 0, 7)
-    };
-
-    private static TableLayoutPanel VerticalPanel(int padding, params Control[] controls)
-    {
-        var panel = new TableLayoutPanel
-        {
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Dock = DockStyle.Top,
-            ColumnCount = 1,
-            RowCount = controls.Length,
-            Padding = new Padding(padding)
-        };
-        panel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        for (var row = 0; row < controls.Length; row++)
-        {
-            panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            panel.Controls.Add(controls[row], 0, row);
+            foreach (var font in _ownedFonts)
+                font.Dispose();
         }
-        return panel;
-    }
-
-    private static GroupBox Card(string title, Control content)
-    {
-        var card = new GroupBox
-        {
-            Text = title,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Dock = DockStyle.Top,
-            Padding = new Padding(8),
-            Margin = new Padding(0, 12, 0, 0)
-        };
-        card.Controls.Add(content);
-        return card;
     }
 
     private static string T(string key, params object?[] arguments) => UiText.Get(key, arguments);
@@ -755,8 +637,4 @@ internal sealed class MainForm : Form
         public override string ToString() => DisplayName;
     }
 
-    private sealed record ModeChoice(ChargeMode Mode)
-    {
-        public override string ToString() => ModeName(Mode);
-    }
 }

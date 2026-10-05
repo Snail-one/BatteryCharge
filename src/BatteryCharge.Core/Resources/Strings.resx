@@ -279,4 +279,79 @@
   <data name="CleanupTaskRemains" xml:space="preserve">
     <value>自动启动任务仍然存在，请重试。</value>
   </data>
+  <data name="BrandSubtitle" xml:space="preserve">
+    <value>联想电池管理</value>
+  </data>
+  <data name="TrayHint" xml:space="preserve">
+    <value>已在系统托盘运行</value>
+  </data>
+  <data name="OverviewNav" xml:space="preserve">
+    <value>概览</value>
+  </data>
+  <data name="SettingsNav" xml:space="preserve">
+    <value>应用设置</value>
+  </data>
+  <data name="OverviewTitle" xml:space="preserve">
+    <value>电池与充电</value>
+  </data>
+  <data name="OverviewSubtitle" xml:space="preserve">
+    <value>掌握电池状态，选择适合你的充电方式。</value>
+  </data>
+  <data name="SettingsTitle" xml:space="preserve">
+    <value>应用设置</value>
+  </data>
+  <data name="SettingsSubtitle" xml:space="preserve">
+    <value>让电池充电助手按你的习惯运行。</value>
+  </data>
+  <data name="BatteryLevelLabel" xml:space="preserve">
+    <value>当前电量</value>
+  </data>
+  <data name="BatteryLevelValue" xml:space="preserve">
+    <value>{0:P0}</value>
+  </data>
+  <data name="CurrentModeLabel" xml:space="preserve">
+    <value>当前充电模式</value>
+  </data>
+  <data name="CurrentBadge" xml:space="preserve">
+    <value>当前使用</value>
+  </data>
+  <data name="ModeIntro" xml:space="preserve">
+    <value>选择一种模式，然后应用更改。</value>
+  </data>
+  <data name="ModeNormalDescription" xml:space="preserve">
+    <value>适合日常使用，按设备默认策略充满电池。</value>
+  </data>
+  <data name="ModeConservationDescription" xml:space="preserve">
+    <value>长时间接通电源时，限制充电上限。</value>
+  </data>
+  <data name="ModeRapidDescription" xml:space="preserve">
+    <value>需要快速补充电量时，加快充电速度。</value>
+  </data>
+  <data name="ModeInUse" xml:space="preserve">
+    <value>所选模式已生效。</value>
+  </data>
+  <data name="ModeSelectionPending" xml:space="preserve">
+    <value>待应用：{0}</value>
+  </data>
+  <data name="ShowDetails" xml:space="preserve">
+    <value>查看详细信息</value>
+  </data>
+  <data name="HideDetails" xml:space="preserve">
+    <value>收起详细信息</value>
+  </data>
+  <data name="LanguageHint" xml:space="preserve">
+    <value>即时切换界面语言，下次启动时保留。</value>
+  </data>
+  <data name="CleanupTitle" xml:space="preserve">
+    <value>清理应用数据</value>
+  </data>
+  <data name="CleanupHint" xml:space="preserve">
+    <value>移除开机启动和本地偏好，完成后退出。充电设置会保留。</value>
+  </data>
+  <data name="TrayBehaviorTitle" xml:space="preserve">
+    <value>在托盘中继续运行</value>
+  </data>
+  <data name="TrayBehaviorHint" xml:space="preserve">
+    <value>关闭或最小化窗口会收起到系统托盘。再次打开程序即可恢复窗口；使用“退出”结束运行。</value>
+  </data>
 </root>

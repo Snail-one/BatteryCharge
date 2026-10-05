@@ -4,7 +4,7 @@ using BatteryCharge.Core;
 
 namespace BatteryCharge.App;
 
-internal sealed class StartupManager
+internal sealed class StartupManager : IStartupManager
 {
     private readonly string _userSid;
     private readonly string _executablePath;
@@ -20,7 +20,7 @@ internal sealed class StartupManager
         _taskName = $"BatteryCharge.Startup.{_userSid}";
     }
 
-    internal StartupRegistration Read() => WithFolder(folder =>
+    public StartupRegistration Read() => WithFolder(folder =>
     {
         object? task = FindTask(folder);
         try
@@ -34,7 +34,7 @@ internal sealed class StartupManager
         }
     });
 
-    internal void SetEnabled(bool enabled)
+    public void SetEnabled(bool enabled)
     {
         // A framework-dependent DLL launched via dotnet.exe is not a stable startup target.
         if (enabled && !string.Equals(Path.GetFileName(_executablePath), "BatteryCharge.exe", StringComparison.OrdinalIgnoreCase))
@@ -72,7 +72,7 @@ internal sealed class StartupManager
     private object? FindTask(dynamic folder) =>
         StartupTaskLookup.Find(() => folder.GetTask(_taskName));
 
-    internal void RemoveForCleanup()
+    public void RemoveForCleanup()
     {
         SetEnabled(false);
         WithFolder(folder =>

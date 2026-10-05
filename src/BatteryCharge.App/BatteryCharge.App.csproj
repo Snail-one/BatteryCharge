@@ -9,10 +9,11 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets/BatteryCharge.ico</ApplicationIcon>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
-    <ApplicationDefaultFont>Microsoft YaHei UI, 9pt</ApplicationDefaultFont>
+    <ApplicationDefaultFont>Segoe UI, 10pt</ApplicationDefaultFont>
     <Version>1.0.0</Version>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="BatteryCharge.UiChecks" />
     <ProjectReference Include="../BatteryCharge.Core/BatteryCharge.Core.csproj" />
     <EmbeddedResource Include="Assets/*.ico" LogicalName="BatteryCharge.App.Assets.%(Filename)%(Extension)" />
   </ItemGroup>
